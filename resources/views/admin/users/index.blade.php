@@ -123,15 +123,17 @@
     </div>
 </div>
 
-@push('styles')
-<style>
-/* ... styles burada aynı şekilde kalacak ... */
-</style>
-@endpush
-
 @push('scripts')
 <script>
-// ... js kodun olduğu gibi kalacak ...
+document.addEventListener('DOMContentLoaded', function() {
+    initAdminAutocomplete({
+        inputId: 'searchInput',
+        resultsId: 'searchResults',
+        clearId: 'clearSearch',
+        searchUrl: '{{ route("admin.users.search") }}',
+        redirectUrl: '{{ route("admin.users.index") }}'
+    });
+});
 </script>
 @endpush
 @endsection

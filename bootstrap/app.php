@@ -27,12 +27,17 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     // Exception Handler özelleştirme
     ->withExceptions(function (Exceptions $exceptions) {
-        // Spatie Permission yetkisiz erişimlerinde özel JSON response
-        $exceptions->render(function (UnauthorizedException $e) {
-            \Log::error('UnauthorizedException thrown!', ['trace' => $e->getTraceAsString()]);
-            return response()->json([
-                'status'  => false,
-                'message' => view('errors.UnauthorizedException')->render(),
+        // Spatie Permission yetkisiz erişimlerinde uygun response
+        $exceptions->render(function (UnauthorizedException $e, \Illuminate\Http\Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Bu işlem için yetkiniz bulunmamaktadır.',
+                ], 403);
+            }
+
+            return response()->view('errors.403', [
+                'exception' => $e,
             ], 403);
         });
     })

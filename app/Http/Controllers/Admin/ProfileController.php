@@ -72,4 +72,31 @@ class ProfileController extends Controller
         return redirect()->route('admin.profile')
             ->with('success', 'Profil başarıyla güncellendi.');
     }
+
+    // Admin profil resmini sil
+    public function deleteProfileImage(Request $request)
+    {
+        $user = auth()->user();
+
+        if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
+            Storage::disk('public')->delete($user->profile_image);
+        }
+
+        $user->profile_image = null;
+        $user->save();
+
+        return redirect()->route('admin.profile')
+            ->with('success', 'Profil resmi başarıyla silindi.');
+    }
+
+    // Profil resmini güvenli şekilde göster
+    public function showProfileImage(string $filename)
+    {
+        $path = 'profile-image/' . $filename;
+        if (!Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::disk('public')->path($path));
+    }
 }

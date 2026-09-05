@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreCategoryRequest;
+use App\Http\Requests\Admin\UpdateCategoryRequest;
 use App\Models\Category;
+use App\Models\MainCategory;
 use App\Models\Image;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -28,20 +31,15 @@ class CategoryController extends Controller
     // Kategori oluşturma formu (admin)
     public function create()
     {
-        $mainCategories = Category::whereNull('main_category_id')->get();
+        $mainCategories = MainCategory::orderBy('name')->get();
         $images = Image::all();
         return view('admin.categories.create', compact('mainCategories', 'images'));
     }
 
     // Kategori kaydetme (admin)
-    public function store(Request $request)
+    public function store(StoreCategoryRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name',
-            'description' => 'nullable|string',
-            'main_category_id' => 'nullable|exists:categories,id',
-            'image_id' => 'nullable|exists:images,id',
-        ]);
+        $validated = $request->validated();
 
         $slug = Str::slug($validated['name']);
         $originalSlug = $slug;
@@ -61,20 +59,15 @@ class CategoryController extends Controller
     // Kategori düzenleme formu (admin)
     public function edit(Category $category)
     {
-        $mainCategories = Category::whereNull('main_category_id')->where('id', '!=', $category->id)->get();
+        $mainCategories = MainCategory::orderBy('name')->get();
         $images = Image::all();
         return view('admin.categories.edit', compact('category', 'mainCategories', 'images'));
     }
 
     // Kategori güncelleme (admin)
-    public function update(Request $request, Category $category)
+    public function update(UpdateCategoryRequest $request, Category $category)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
-            'description' => 'nullable|string',
-            'main_category_id' => 'nullable|exists:categories,id',
-            'image_id' => 'nullable|exists:images,id',
-        ]);
+        $validated = $request->validated();
 
         if ($validated['name'] !== $category->name) {
             $slug = Str::slug($validated['name']);

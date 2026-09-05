@@ -2,9 +2,6 @@
 
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\ServiceProvider;
-App\Providers\RepositoryServiceProvider::class;
-App\Providers\RepositoryServiceProvider::class;
-
 
 return [
 

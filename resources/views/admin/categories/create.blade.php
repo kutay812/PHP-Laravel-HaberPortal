@@ -49,7 +49,17 @@
                     </div>
                 </div>
 
-                 
+                <div class="form-group mb-3">
+                    <label for="main_category_id">Ana Kategori</label>
+                    <select class="form-control" id="main_category_id" name="main_category_id">
+                        <option value="">Ana Kategori Seçin (Opsiyonel)</option>
+                        @foreach($mainCategories as $mainCategory)
+                            <option value="{{ $mainCategory->id }}" {{ old('main_category_id') == $mainCategory->id ? 'selected' : '' }}>
+                                {{ $mainCategory->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
                 
                 <div class="form-group">
                     <label for="description">Açıklama</label>

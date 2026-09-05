@@ -15,7 +15,7 @@ class PasswordResetController extends Controller
     // Şifre sıfırlama formu (admin)
     public function showForgotPasswordForm()
     {
-        return view('admin.auth.forgot-password');
+        return view('admin.forgot-password');
     }
 
     // Şifre sıfırlama linkini e-posta ile gönder (admin)
@@ -49,7 +49,7 @@ class PasswordResetController extends Controller
     // Şifre sıfırlama formu (admin)
     public function showResetPasswordForm(Request $request, $token)
     {
-        return view('admin.auth.reset-password', [
+        return view('admin.reset-password', [
             'token' => $token,
             'email' => $request->email
         ]);

@@ -73,7 +73,7 @@
             <!-- Bottom Row: Navigation Links -->
             <nav class="hidden md:flex gap-6 py-2 overflow-x-auto">
                 <a class="{{ request()->routeIs('home') && !request()->has('tag') ? 'text-secondary dark:text-secondary-fixed border-b-2 border-secondary dark:border-secondary-fixed' : 'text-on-surface dark:text-surface-variant font-bold hover:text-secondary dark:hover:text-secondary-fixed transition-colors duration-200' }} pb-1 font-headline-sm text-headline-sm tracking-tight whitespace-nowrap" href="{{ route('home') }}">ANA SAYFA</a>
-                @foreach(\App\Models\Category::all() as $cat)
+                @foreach($globalCategories ?? [] as $cat)
                     <a class="{{ request()->is('kategori/'.$cat->slug) ? 'text-secondary dark:text-secondary-fixed border-b-2 border-secondary dark:border-secondary-fixed' : 'text-on-surface dark:text-surface-variant font-bold hover:text-secondary dark:hover:text-secondary-fixed transition-colors duration-200' }} pb-1 font-headline-sm text-headline-sm tracking-tight whitespace-nowrap" href="{{ route('category.news', $cat->slug) }}">{{ mb_strtoupper($cat->name, 'UTF-8') }}</a>
                 @endforeach
             </nav>
@@ -111,7 +111,7 @@
                     <!-- Mobile Navigation -->
                     <nav class="flex flex-col gap-4">
                         <a class="text-lg font-bold {{ request()->routeIs('home') && !request()->has('tag') ? 'text-secondary' : 'text-on-surface' }}" href="{{ route('home') }}">ANA SAYFA</a>
-                        @foreach(\App\Models\Category::all() as $cat)
+                        @foreach($globalCategories ?? [] as $cat)
                             <a class="text-lg font-bold {{ request()->is('kategori/'.$cat->slug) ? 'text-secondary' : 'text-on-surface' }}" href="{{ route('category.news', $cat->slug) }}">{{ mb_strtoupper($cat->name, 'UTF-8') }}</a>
                         @endforeach
                     </nav>

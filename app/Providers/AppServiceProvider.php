@@ -12,14 +12,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(
-            \App\Repositories\UserRepositoryInterface::class,
-            \App\Repositories\UserRepository::class
-        );
-        $this->app->bind(
-            \App\Repositories\NewsRepositoryInterface::class,
-            \App\Repositories\NewsRepository::class
-        );
+        //
     }
 
     /**
@@ -33,24 +26,27 @@ class AppServiceProvider extends ServiceProvider
 
         Schema::defaultStringLength(191);
 
-        // Share categories and settings with all views (only if database connection works and table exists)
+        // Global verileri önbellek ile view'lerle paylaş
         if (!app()->runningInConsole()) {
             try {
-                if (Schema::hasTable('categories')) {
-                    $globalCategories = \App\Models\Category::orderBy('name')->get();
-                    view()->share('globalCategories', $globalCategories);
-                }
-                if (Schema::hasTable('settings')) {
-                    $siteName = \App\Models\Setting::get('site_name', 'HaberPortal');
-                    $siteDesc = \App\Models\Setting::get('site_description', 'En güncel ve doğru haberler');
-                    $breakingNewsEnabled = \App\Models\Setting::get('breaking_news_enabled', true);
-                    
-                    view()->share('siteName', $siteName);
-                    view()->share('siteDesc', $siteDesc);
-                    view()->share('breakingNewsEnabled', $breakingNewsEnabled);
-                }
-            } catch (\Exception $e) {
-                // Ignore exceptions during seeding/migrations
+                $globalCategories = \Illuminate\Support\Facades\Cache::remember('global_categories', 3600, function () {
+                    return \App\Models\Category::orderBy('name')->get();
+                });
+                view()->share('globalCategories', $globalCategories);
+
+                $siteSettings = \Illuminate\Support\Facades\Cache::remember('global_settings', 3600, function () {
+                    return [
+                        'siteName'            => \App\Models\Setting::get('site_name', 'HaberPortal'),
+                        'siteDesc'            => \App\Models\Setting::get('site_description', 'En güncel ve doğru haberler'),
+                        'breakingNewsEnabled' => \App\Models\Setting::get('breaking_news_enabled', true),
+                    ];
+                });
+
+                view()->share('siteName', $siteSettings['siteName']);
+                view()->share('siteDesc', $siteSettings['siteDesc']);
+                view()->share('breakingNewsEnabled', $siteSettings['breakingNewsEnabled']);
+            } catch (\Throwable $e) {
+                // Kurulum veya migration esnasındaki hataları yoksay
             }
         }
     }

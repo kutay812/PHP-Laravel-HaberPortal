@@ -21,30 +21,39 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMegaMenu();
 });
 
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+    } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+    }
+    updateThemeToggleUI(theme);
+}
+
 // Theme Management
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
     const preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const activeTheme = savedTheme || preferredTheme;
-    document.documentElement.setAttribute('data-theme', activeTheme);
-    updateThemeToggleUI(activeTheme);
+    applyTheme(activeTheme);
 }
 
 function setupThemeToggle() {
     const toggleBtns = document.querySelectorAll('.theme-toggle-btn');
     toggleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const isDark = document.documentElement.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark';
+            const nextTheme = isDark ? 'light' : 'dark';
 
             if (document.startViewTransition) {
                 document.startViewTransition(() => {
-                    document.documentElement.setAttribute('data-theme', nextTheme);
-                    updateThemeToggleUI(nextTheme);
+                    applyTheme(nextTheme);
                 });
             } else {
-                document.documentElement.setAttribute('data-theme', nextTheme);
-                updateThemeToggleUI(nextTheme);
+                applyTheme(nextTheme);
             }
             localStorage.setItem('theme', nextTheme);
         });
@@ -182,38 +191,5 @@ function setupMegaMenu() {
                 megaMenu.classList.remove('flex');
             }
         });
-    }
-
-    // Mobile Menu
-    const mobileToggle = document.getElementById('mobile-menu-toggle');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const mobileClose = document.getElementById('mobile-menu-close');
-    const mobileBackdrop = document.getElementById('mobile-menu-backdrop');
-
-    if (mobileToggle && mobileMenu) {
-        function openMobileMenu() {
-            mobileMenu.classList.remove('hidden');
-            mobileBackdrop.classList.remove('hidden');
-            // Small delay to allow display:block to apply before animating transform/opacity
-            setTimeout(() => {
-                mobileMenu.classList.remove('-translate-x-full');
-                mobileBackdrop.classList.remove('opacity-0');
-            }, 10);
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeMobileMenu() {
-            mobileMenu.classList.add('-translate-x-full');
-            mobileBackdrop.classList.add('opacity-0');
-            setTimeout(() => {
-                mobileMenu.classList.add('hidden');
-                mobileBackdrop.classList.add('hidden');
-                document.body.style.overflow = '';
-            }, 300); // matches duration-normal (300ms typically or similar)
-        }
-
-        mobileToggle.addEventListener('click', openMobileMenu);
-        mobileClose?.addEventListener('click', closeMobileMenu);
-        mobileBackdrop?.addEventListener('click', closeMobileMenu);
     }
 }

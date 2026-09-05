@@ -43,13 +43,13 @@ class HomeController extends Controller
 
         // ── MANŞET HABERLERİ ──
         $featuredNews = Cache::remember('news.featured.' . ($categorySlug ?? 'all'), 120, function () use ($category) {
-            $query = News::with(['category', 'user', 'image', 'tags', 'newsSource'])->featured()->latest();
+            $query = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->featured()->latest();
             if ($category) $query->where('category_id', $category->id);
             $results = $query->limit(10)->get(); 
 
             // Eğer manşet yoksa (hepsi silinmişse), en yeni haberleri manşet yap (YEDEK SİSTEM)
             if ($results->isEmpty()) {
-                $fallbackQuery = News::with(['category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
+                $fallbackQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
                 if ($category) $fallbackQuery->where('category_id', $category->id);
                 $results = $fallbackQuery->limit(10)->get();
             }
@@ -67,16 +67,16 @@ class HomeController extends Controller
 
         // ── EDİTÖRÜN SEÇTİKLERİ ──
         $editorPicks = Cache::remember('news.editor_picks', 300, function () {
-            $results = News::with(['category', 'user', 'image'])->editorPicks()->latest()->limit(5)->get();
+            $results = News::with(['categories', 'category', 'user', 'image'])->editorPicks()->latest()->limit(5)->get();
             if ($results->isEmpty()) {
-                $results = News::with(['category', 'user', 'image'])->published()->inRandomOrder()->limit(5)->get();
+                $results = News::with(['categories', 'category', 'user', 'image'])->published()->inRandomOrder()->limit(5)->get();
             }
             return $results;
         });
 
         // ── EN ÇOK OKUNANLAR (Son 7 gün) ──
         $mostRead = Cache::remember('news.most_read', 300, function () {
-            return News::with(['category', 'image'])
+            return News::with(['categories', 'category', 'image'])
                        ->published()->where('created_at', '>=', now()->subDays(7))
                        ->orderByDesc('views')->limit(10)->get();
         });
@@ -88,7 +88,7 @@ class HomeController extends Controller
             
             foreach ($targetCategories as $slug) {
                 $categoryBlocks[$slug] = Cache::remember('news.category_block.' . $slug, 180, function () use ($slug) {
-                    return News::with(['category', 'image'])
+                    return News::with(['categories', 'category', 'image'])
                                ->published()
                                ->whereHas('category', function($q) use ($slug) {
                                    $q->where('slug', $slug);
@@ -106,7 +106,7 @@ class HomeController extends Controller
         });
 
         // ── SON HABERLER VEYA ARAMA SONUÇLARI ──
-        $newsQuery = News::with(['category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
+        $newsQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
 
         if ($category) {
             $newsQuery->where('category_id', $category->id);

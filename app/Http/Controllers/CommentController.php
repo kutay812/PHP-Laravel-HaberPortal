@@ -42,6 +42,10 @@ class CommentController extends Controller
 
         $this->commentService->updateComment($comment, $request->content);
 
+        if ($comment->news) {
+            return redirect()->route('news.show', $comment->news->slug)->with('success', 'Yorum güncellendi.');
+        }
+
         return redirect()->back()->with('success', 'Yorum güncellendi.');
     }
 

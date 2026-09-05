@@ -2,44 +2,39 @@
 
 namespace App\Services;
 
-use App\Repositories\UserRepositoryInterface;
+use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class UserService
 {
-    protected $userRepository;
-
-    public function __construct(UserRepositoryInterface $userRepository)
-    {
-        $this->userRepository = $userRepository;
-    }
-
     public function getAllUsers()
     {
-        return $this->userRepository->all();
+        return User::all();
     }
 
     public function getUserById($id)
     {
-        return $this->userRepository->find($id);
+        return User::findOrFail($id);
     }
 
     public function createUser(array $data)
     {
         $data['password'] = Hash::make($data['password']);
-        return $this->userRepository->create($data);
+        return User::create($data);
     }
 
     public function updateUser($id, array $data)
     {
+        $user = User::findOrFail($id);
         if (isset($data['password']) && $data['password']) {
             $data['password'] = Hash::make($data['password']);
         } else {
             unset($data['password']);
         }
-        return $this->userRepository->update($id, $data);
+        $user->update($data);
+        return $user;
     }
 
     public function deleteUser($id)
@@ -47,7 +42,7 @@ class UserService
         if ($id == Auth::id()) {
             throw new \Exception('Kendi hesabınızı silemezsiniz.');
         }
-        return $this->userRepository->delete($id);
+        return User::findOrFail($id)->delete();
     }
 
     public function profileEdit($user, $data)

@@ -21,10 +21,10 @@ class AssignAdminRole extends Command
             return 1;
         }
 
-        $adminRole = Role::firstOrCreate(['name' => 'admin']);
+        $adminRole = Role::firstOrCreate(['name' => 'Admin']);
         
-        if ($user->hasRole('admin')) {
-            $this->info("Kullanıcı zaten admin rolüne sahip: {$email}");
+        if ($user->hasRole('Admin')) {
+            $this->info("Kullanıcı zaten Admin rolüne sahip: {$email}");
             return 0;
         }
 

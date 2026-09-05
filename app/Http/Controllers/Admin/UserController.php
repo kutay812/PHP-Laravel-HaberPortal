@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreUserRequest;
+use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
@@ -44,14 +46,9 @@ class UserController extends Controller
     }
 
     // Kullanıcı kaydet (admin)
-    public function store(Request $request)
+    public function store(StoreUserRequest $request)
     {
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'roles'    => 'required|array'
-        ]);
+        $validated = $request->validated();
 
         $user = User::create([
             'name'     => $validated['name'],
@@ -59,7 +56,7 @@ class UserController extends Controller
             'password' => bcrypt($validated['password']),
         ]);
 
-        $roleNames = Role::whereIn('id', $request->roles)->pluck('name')->toArray();
+        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->toArray();
         $user->assignRole($roleNames);
 
         return redirect()->route('admin.users.index')
@@ -79,19 +76,14 @@ class UserController extends Controller
     }
 
     // Kullanıcı güncelle (admin)
-    public function update(Request $request, User $user)
+    public function update(UpdateUserRequest $request, User $user)
     {
         if ($user->hasRole('Super Admin') && !auth()->user()->hasRole('Super Admin')) {
             return redirect()->route('admin.users.index')
                 ->with('error', 'Super Admin kullanıcılarını düzenleme yetkiniz yok.');
         }
 
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            'password' => 'nullable|string|min:8|confirmed',
-            'roles'    => 'required|array'
-        ]);
+        $validated = $request->validated();
 
         $user->update([
             'name'  => $validated['name'],
@@ -102,7 +94,7 @@ class UserController extends Controller
             $user->update(['password' => bcrypt($validated['password'])]);
         }
 
-        $roleNames = Role::whereIn('id', $request->roles)->pluck('name')->toArray();
+        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->toArray();
         $user->syncRoles($roleNames);
 
         return redirect()->route('admin.users.index')

@@ -25,7 +25,7 @@ class NewsController extends Controller
     public function index(Request $request)
     {
         $query = News::query()
-            ->with(['category', 'user'])
+            ->with(['categories', 'category', 'user'])
             ->when($request->filled('search'), function($q) use ($request) {
                 $searchTerm = $request->search;
                 $q->where(function($q) use ($searchTerm) {

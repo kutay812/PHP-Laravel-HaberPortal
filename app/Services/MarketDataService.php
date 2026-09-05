@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
@@ -9,46 +11,44 @@ use Illuminate\Support\Facades\Log;
 class MarketDataService
 {
     /**
-     * Get market data (USD, EUR, GOLD, BIST100)
+     * Get market data (USD, EUR, GOLD, BIST100) with fast fallback
      */
     public function getMarketData(): array
     {
         return Cache::remember('market_data', 300, function () {
-            $data = [
+            $fallback = [
                 'BIST 100' => ['value' => '9.854', 'change' => '+1.2%'],
-                'DOLAR'    => ['value' => '32.50', 'change' => '+0.1%'],
-                'EURO'     => ['value' => '35.10', 'change' => '+0.2%'],
-                'ALTIN'    => ['value' => '2.450', 'change' => '-0.5%'],
+                'DOLAR'    => ['value' => '34.20', 'change' => '+0.1%'],
+                'EURO'     => ['value' => '37.10', 'change' => '+0.2%'],
+                'ALTIN'    => ['value' => '2.950', 'change' => '-0.3%'],
             ];
 
             try {
-                // Güvenilir, anlık çalışan API (truncgil)
-                $response = Http::withoutVerifying()->timeout(10)->get('https://finans.truncgil.com/today.json');
+                $response = Http::withoutVerifying()->timeout(2)->get('https://finans.truncgil.com/today.json');
                 
                 if ($response->successful()) {
                     $json = $response->json();
                     
                     if (isset($json['USD'])) {
-                        $data['DOLAR']['value'] = $json['USD']['Satış'];
-                        $data['DOLAR']['change'] = $json['USD']['Değişim'];
+                        $fallback['DOLAR']['value'] = $json['USD']['Satış'] ?? $fallback['DOLAR']['value'];
+                        $fallback['DOLAR']['change'] = $json['USD']['Değişim'] ?? $fallback['DOLAR']['change'];
                     }
                     if (isset($json['EUR'])) {
-                        $data['EURO']['value'] = $json['EUR']['Satış'];
-                        $data['EURO']['change'] = $json['EUR']['Değişim'];
+                        $fallback['EURO']['value'] = $json['EUR']['Satış'] ?? $fallback['EURO']['value'];
+                        $fallback['EURO']['change'] = $json['EUR']['Değişim'] ?? $fallback['EURO']['change'];
                     }
                     if (isset($json['gram-altin'])) {
-                        $data['ALTIN']['value'] = $json['gram-altin']['Satış'];
-                        $data['ALTIN']['change'] = $json['gram-altin']['Değişim'];
+                        $fallback['ALTIN']['value'] = $json['gram-altin']['Satış'] ?? $fallback['ALTIN']['value'];
+                        $fallback['ALTIN']['change'] = $json['gram-altin']['Değişim'] ?? $fallback['ALTIN']['change'];
                     }
                 }
-            } catch (\Exception $e) {
-                Log::error("Market data fetch error: " . $e->getMessage());
+            } catch (\Throwable $e) {
+                Log::warning("Market data fetch timeout or failure: " . $e->getMessage());
             }
 
-            // BIST 100 için hala simülasyon (Ücretsiz public API nadir bulunur, varsa eklenebilir)
-            $data['BIST 100']['change'] = $this->randomFluctuation();
+            $fallback['BIST 100']['change'] = $this->randomFluctuation();
 
-            return $data;
+            return $fallback;
         });
     }
 

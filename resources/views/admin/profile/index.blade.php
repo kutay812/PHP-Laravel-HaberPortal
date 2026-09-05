@@ -1,4 +1,4 @@
-@extends('layouts.admin.simple')
+@extends('layouts.admin.app')
 
 @section('content')
 <div class="container-fluid py-4">
@@ -104,7 +104,7 @@
                     </form>
 
                     @if(auth()->user()->profile_image)
-                        <form id="remove-image" action="{{ url('/admin/profile/remove-image') }}" method="POST" class="d-none">
+                        <form id="remove-image" action="{{ route('admin.profile.image.delete') }}" method="POST" class="d-none">
                             @csrf
                             @method('DELETE')
                         </form>

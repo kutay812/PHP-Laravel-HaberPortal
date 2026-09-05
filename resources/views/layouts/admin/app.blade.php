@@ -12,7 +12,8 @@
 
     <!-- Custom styles -->
     <link href="/storage/adminlte/css/adminlte.min.css" rel="stylesheet">
-    
+    <link href="/css/admin-autocomplete.css" rel="stylesheet">
+    @stack('styles')
     <style>
         :root {
             --primary-color: #3498db;
@@ -305,6 +306,7 @@
         }, 3000);
     </script>
 
+    <script src="/js/admin-autocomplete.js"></script>
     @stack('scripts')
 </body>
 </html>

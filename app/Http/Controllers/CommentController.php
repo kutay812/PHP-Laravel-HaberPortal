@@ -4,38 +4,39 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\RoleName;
 use App\Http\Requests\SaveCommentRequest;
 use App\Models\Comment;
 use App\Models\News;
-use App\Services\CommentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 
 class CommentController extends Controller
 {
-    public function __construct(
-        protected readonly CommentService $commentService,
-    ) {}
-
     public function store(SaveCommentRequest $request, News $news): RedirectResponse
     {
-        $this->commentService->storeComment($news, (string) $request->validated('content'));
+        Comment::create([
+            'news_id' => $news->id,
+            'user_id' => Auth::id(),
+            'content' => (string) $request->validated('content'),
+        ]);
 
         return back()->with('success', 'Yorumunuz eklendi.');
     }
 
     public function edit(Comment $comment): View
     {
-        if (!$this->commentService->userCanModify($comment)) {
-            abort(403);
-        }
+        abort_unless($this->canModify($comment), 403);
 
         return view('comments.edit', compact('comment'));
     }
 
     public function update(SaveCommentRequest $request, Comment $comment): RedirectResponse
     {
-        $this->commentService->updateComment($comment, (string) $request->validated('content'));
+        abort_unless($this->canModify($comment), 403, 'Bu yorumu düzenlemeye yetkiniz yok.');
+
+        $comment->update(['content' => (string) $request->validated('content')]);
 
         if ($comment->news) {
             return redirect()->route('news.show', $comment->news->slug)->with('success', 'Yorum güncellendi.');
@@ -46,8 +47,17 @@ class CommentController extends Controller
 
     public function destroy(Comment $comment): RedirectResponse
     {
-        $this->commentService->deleteComment($comment);
+        abort_unless($this->canModify($comment), 403, 'Bu yorumu silmeye yetkiniz yok.');
+
+        $comment->delete();
 
         return back()->with('success', 'Yorum silindi.');
+    }
+
+    private function canModify(Comment $comment): bool
+    {
+        $user = Auth::user();
+
+        return $user !== null && ($user->hasAnyRole(RoleName::staffRoles()) || $user->id === $comment->user_id);
     }
 }

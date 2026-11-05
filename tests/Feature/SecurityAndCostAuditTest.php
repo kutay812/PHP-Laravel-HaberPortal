@@ -7,7 +7,6 @@ namespace Tests\Feature;
 use App\Enums\NewsStatus;
 use App\Enums\RoleName;
 use App\Jobs\FetchNewsJob;
-use App\Jobs\MailQueue;
 use App\Mail\AdminPasswordResetMail;
 use App\Models\Category;
 use App\Models\News;
@@ -250,10 +249,6 @@ class SecurityAndCostAuditTest extends TestCase
         $this->assertInstanceOf(ShouldBeUnique::class, $fetchJob);
         $this->assertSame(2, $fetchJob->tries);
         $this->assertSame(1, $fetchJob->maxExceptions);
-
-        $mailJob = new MailQueue('user@example.com');
-        $this->assertSame(2, $mailJob->tries);
-        $this->assertSame(1, $mailJob->maxExceptions);
 
         $resetMail = new AdminPasswordResetMail('https://example.test/reset');
         $this->assertSame(2, $resetMail->tries);

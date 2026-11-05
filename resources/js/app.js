@@ -1,5 +1,3 @@
-import './bootstrap';
-
 document.addEventListener('DOMContentLoaded', () => {
     // Theme Management
     initTheme();

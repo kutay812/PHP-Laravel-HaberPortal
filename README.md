@@ -146,15 +146,15 @@ php artisan test
 
 ```text
 ├── app/
-│   ├── Console/Commands/     # news:fetch, news:enrich ve izin yönetimi komutları
+│   ├── Console/Commands/     # news:fetch ve news:enrich komutları
 │   ├── Enums/                # NewsStatus ve RoleName tip güvenli Enum sınıfları
 │   ├── Http/
 │   │   ├── Controllers/      # Ön yüz ve Admin (Dashboard, News, Source, Tag, User) denetleyicileri
 │   │   ├── Middleware/       # EnforceDailyQuota ve PreventBrowserBackCache katmanları
 │   │   └── Requests/         # Tüm HTTP girişlerini doğrulayan FormRequest sınıfları
-│   ├── Jobs/                 # FetchNewsJob (ShouldBeUnique) ve MailQueue kuyruk işleri
+│   ├── Jobs/                 # FetchNewsJob (ShouldBeUnique) arka plan kuyruk işi
+│   ├── Mail/                 # AdminPasswordResetMail e-posta sınıfı
 │   ├── Models/               # News, Category, NewsSource, Tag, Comment, Image, User, Setting
-│   ├── Policies/             # Model bazlı yetkilendirme politikaları
 │   └── Services/             # RssFetcher, ArticleExtractor, TurkishArticleRewriter, HtmlSanitizer, UrlSecurity
 ├── config/                   # Uygulama, önbellek ve güvenlik/kota (security.php) ayarları
 ├── database/                 # Migrasyonlar, Factory tanımları ve Seeder sınıfları

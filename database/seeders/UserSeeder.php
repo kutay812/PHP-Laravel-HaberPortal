@@ -1,53 +1,56 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
+use App\Enums\RoleName;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserSeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
-        // Super Admin
+        $configuredPassword = (string) env('DEFAULT_ADMIN_PASSWORD', '');
+        $generatedPassword = $configuredPassword !== '' ? $configuredPassword : Str::password(24);
+        $hashedPassword = Hash::make($generatedPassword);
+
+        $adminEmail = (string) env('DEFAULT_ADMIN_EMAIL', 'admin@example.com');
+
         $superAdmin = User::firstOrCreate(
             ['email' => 'superadmin@example.com'],
             [
-                'name' => 'Super Admin',
-                'password' => Hash::make('password123'),
+                'name'     => 'Super Admin',
+                'password' => $hashedPassword,
             ]
         );
-        $superAdmin->assignRole('Super Admin');
+        $superAdmin->syncRoles([RoleName::SuperAdmin->value]);
 
-        // Admin
         $admin = User::firstOrCreate(
-            ['email' => 'admin@example.com'],
+            ['email' => $adminEmail],
             [
-                'name' => 'Admin User',
-                'password' => Hash::make('password123'),
+                'name'     => 'Admin User',
+                'password' => $hashedPassword,
             ]
         );
-        $admin->assignRole('Admin');
+        $admin->syncRoles([RoleName::Admin->value]);
 
-        // Editor
-        $editor = User::firstOrCreate(
-            ['email' => 'editor@example.com'],
-            [
-                'name' => 'Editor User',
-                'password' => Hash::make('password123'),
-            ]
-        );
-        $editor->assignRole('Editor');
+        if (!app()->environment('production')) {
+            $editor = User::firstOrCreate(
+                ['email' => 'editor@example.com'],
+                [
+                    'name'     => 'Editor User',
+                    'password' => $hashedPassword,
+                ]
+            );
+            $editor->syncRoles([RoleName::Editor->value]);
+        }
 
-        // Test Editor
-        $testEditor = User::firstOrCreate(
-            ['email' => 'test@test.com'],
-            [
-                'name' => 'Test Editor',
-                'password' => Hash::make('12345678'),
-            ]
-        );
-        $testEditor->assignRole('Editor');
+        if ($configuredPassword === '' && $this->command !== null) {
+            $this->command->warn("DEFAULT_ADMIN_PASSWORD tanımlı olmadığı için tek seferlik güçlü parola üretildi: {$generatedPassword}");
+        }
     }
 }

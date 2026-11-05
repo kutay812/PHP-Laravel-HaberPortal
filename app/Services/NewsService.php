@@ -1,157 +1,237 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Models\News;
+use App\Enums\NewsStatus;
+use App\Models\Category;
 use App\Models\Image;
+use App\Models\News;
 use App\Models\Tag;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class NewsService
 {
+    public function __construct(
+        private readonly HtmlSanitizerService $sanitizer,
+    ) {}
+
     /**
-     * Create news article with associated tags and image
+     * Create news article with associated tags and image.
+     *
+     * @param array<string, mixed> $data
      */
     public function createNews(array $data, ?int $authorId): News
     {
-        return DB::transaction(function () use ($data, $authorId) {
-            // Slug generation
-            $slug = Str::slug($data['title']);
-            $originalSlug = $slug;
-            $counter = 2;
-            while (News::where('slug', $slug)->exists()) {
-                $slug = $originalSlug . '-' . $counter++;
-            }
+        $news = DB::transaction(function () use ($data, $authorId): News {
+            $title = (string) $data['title'];
+            $slug = News::generateUniqueSlug($title);
 
-            // Image handling
             $imageId = null;
-            if (isset($data['image']) && $data['image']->isValid()) {
+            if (isset($data['image']) && $data['image'] instanceof UploadedFile && $data['image']->isValid()) {
                 $imageId = $this->uploadImage($data['image']);
-            } elseif (isset($data['new_image']) && $data['new_image']->isValid()) {
+            } elseif (isset($data['new_image']) && $data['new_image'] instanceof UploadedFile && $data['new_image']->isValid()) {
                 $imageId = $this->uploadImage($data['new_image']);
             }
 
-            // News creation
+            $sanitizedContent = $this->sanitizer->sanitize((string) ($data['content'] ?? ''));
+            $isActive = isset($data['is_active']) ? (bool) $data['is_active'] : true;
+            $status = $data['status'] ?? ($isActive ? NewsStatus::Published->value : NewsStatus::Draft->value);
+
             $news = News::create([
-                'title'          => $data['title'],
-                'description'    => $data['description'],
-                'content'        => $data['content'],
-                'category_id'    => $data['category_id'],
+                'title'          => $title,
+                'description'    => strip_tags((string) ($data['description'] ?? '')),
+                'content'        => $sanitizedContent,
+                'category_id'    => (int) $data['category_id'],
                 'user_id'        => $authorId,
-                'is_active'      => $data['is_active'] ?? true,
-                'status'         => $data['status'] ?? 'published',
+                'is_active'      => $isActive,
+                'is_featured'    => isset($data['is_featured']) ? (bool) $data['is_featured'] : false,
+                'is_breaking'    => isset($data['is_breaking']) ? (bool) $data['is_breaking'] : false,
+                'is_editor_pick' => isset($data['is_editor_pick']) ? (bool) $data['is_editor_pick'] : false,
+                'status'         => $status,
                 'slug'           => $slug,
                 'image_id'       => $imageId,
                 'views'          => 0,
             ]);
 
-            // Tags handling
-            if (!empty($data['tags'])) {
+            if (!empty($data['tags']) && is_string($data['tags'])) {
                 $this->syncTags($news, $data['tags']);
             }
 
             return $news;
         });
+
+        $this->flushPublicCaches((int) $news->category_id);
+
+        return $news;
     }
 
     /**
-     * Update news article
+     * Update news article safely with HTML sanitization and accurate tag counter delta.
+     *
+     * @param array<string, mixed> $data
      */
     public function updateNews(News $news, array $data): News
     {
-        return DB::transaction(function () use ($news, $data) {
-            // Re-generate slug if title changed
-            if (isset($data['title']) && $news->title !== $data['title']) {
-                $slug = Str::slug($data['title']);
-                $originalSlug = $slug;
-                $counter = 2;
-                while (News::where('slug', $slug)->where('id', '!=', $news->id)->exists()) {
-                    $slug = $originalSlug . '-' . $counter++;
-                }
-                $news->slug = $slug;
+        $oldCategoryId = (int) $news->category_id;
+
+        $updated = DB::transaction(function () use ($news, $data): News {
+            if (isset($data['title']) && is_string($data['title']) && $news->title !== $data['title']) {
+                $news->slug = News::generateUniqueSlug($data['title'], $news->id);
             }
 
-            // Handle image updates
             $uploadedImage = $data['image'] ?? $data['new_image'] ?? null;
-            if ($uploadedImage && $uploadedImage->isValid()) {
-                // Delete old image
+            if ($uploadedImage instanceof UploadedFile && $uploadedImage->isValid()) {
                 if ($news->image) {
                     Storage::disk('public')->delete($news->image->path);
                     $news->image->delete();
                 }
 
-                $imageId = $this->uploadImage($uploadedImage);
-                $news->image_id = $imageId;
+                $news->image_id = $this->uploadImage($uploadedImage);
             }
 
-            // General attributes update
+            $content = isset($data['content'])
+                ? $this->sanitizer->sanitize((string) $data['content'])
+                : $news->content;
+
+            $description = isset($data['description'])
+                ? strip_tags((string) $data['description'])
+                : $news->description;
+
+            $isActive = array_key_exists('is_active', $data)
+                ? (bool) $data['is_active']
+                : (bool) $news->is_active;
+
+            $status = $data['status'] ?? (
+                array_key_exists('is_active', $data)
+                    ? ($isActive ? NewsStatus::Published->value : NewsStatus::Draft->value)
+                    : $news->status
+            );
+
             $news->fill([
-                'title'       => $data['title'] ?? $news->title,
-                'description' => $data['description'] ?? $news->description,
-                'content'     => $data['content'] ?? $news->content,
-                'category_id' => $data['category_id'] ?? $news->category_id,
-                'is_active'   => isset($data['is_active']) ? (bool) $data['is_active'] : $news->is_active,
-                'status'      => $data['status'] ?? $news->status,
+                'title'          => $data['title'] ?? $news->title,
+                'description'    => $description,
+                'content'        => $content,
+                'category_id'    => isset($data['category_id']) ? (int) $data['category_id'] : $news->category_id,
+                'is_active'      => $isActive,
+                'is_featured'    => array_key_exists('is_featured', $data) ? (bool) $data['is_featured'] : $news->is_featured,
+                'is_breaking'    => array_key_exists('is_breaking', $data) ? (bool) $data['is_breaking'] : $news->is_breaking,
+                'is_editor_pick' => array_key_exists('is_editor_pick', $data) ? (bool) $data['is_editor_pick'] : $news->is_editor_pick,
+                'status'         => $status,
             ]);
 
             $news->save();
 
-            // Tags updates
-            if (isset($data['tags'])) {
-                $this->syncTags($news, $data['tags']);
+            if (array_key_exists('tags', $data)) {
+                $this->syncTags($news, (string) ($data['tags'] ?? ''));
             }
 
             return $news;
         });
+
+        $this->flushPublicCaches($oldCategoryId, (int) $updated->category_id);
+
+        return $updated;
     }
 
     /**
-     * Delete news article and its image safely
+     * Delete news article and its image safely.
      */
     public function deleteNews(News $news): void
     {
-        DB::transaction(function () use ($news) {
+        $categoryId = (int) $news->category_id;
+
+        DB::transaction(static function () use ($news): void {
             if ($news->image) {
                 Storage::disk('public')->delete($news->image->path);
                 $news->image->delete();
             }
-            $news->tags()->detach();
+
+            $detachedTagIds = $news->tags()->pluck('tags.id')->all();
+            if ($detachedTagIds !== []) {
+                Tag::whereIn('id', $detachedTagIds)
+                    ->where('usage_count', '>', 0)
+                    ->decrement('usage_count');
+                $news->tags()->detach();
+            }
+
             $news->delete();
         });
+
+        $this->flushPublicCaches($categoryId);
     }
 
-    /**
-     * Private helper to upload image and record it
-     */
-    private function uploadImage($imageFile): int
+    private function flushPublicCaches(?int ...$categoryIds): void
     {
-        $path = $imageFile->store('news-images', 'public');
+        foreach ([
+            'news.featured.all',
+            'news.breaking',
+            'news.editor_picks',
+            'news.most_read',
+            'news.most_commented',
+            'tags.trending',
+            'seo.sitemap.index',
+            'seo.sitemap.news',
+            'seo.rss.feed',
+        ] as $key) {
+            Cache::forget($key);
+        }
+
+        $ids = array_values(array_unique(array_filter($categoryIds)));
+        if ($ids !== []) {
+            $slugs = Category::whereIn('id', $ids)->pluck('slug')->all();
+            foreach ($slugs as $slug) {
+                if (is_string($slug) && $slug !== '') {
+                    Cache::forget('news.category_block.' . $slug);
+                    Cache::forget('news.featured.' . $slug);
+                }
+            }
+        }
+    }
+
+    private function uploadImage(UploadedFile $imageFile): int
+    {
+        $path = (string) $imageFile->store('news-images', 'public');
         $image = Image::create([
             'path' => $path,
             'name' => $imageFile->getClientOriginalName(),
         ]);
-        return $image->id;
+
+        return (int) $image->id;
     }
 
-    /**
-     * Private helper to sync tags
-     */
     private function syncTags(News $news, string $tagsString): void
     {
         $tagNames = array_map('trim', explode(',', $tagsString));
         $tagIds = [];
+
         foreach ($tagNames as $tagName) {
-            if (!empty($tagName)) {
+            $slug = Str::slug($tagName);
+            if ($tagName !== '' && $slug !== '') {
                 $tag = Tag::firstOrCreate(
-                    ['slug' => Str::slug($tagName)],
+                    ['slug' => $slug],
                     ['name' => $tagName]
                 );
-                $tag->increment('usage_count');
-                $tagIds[] = $tag->id;
+                $tagIds[] = (int) $tag->id;
             }
         }
-        $news->tags()->sync($tagIds);
+
+        $tagIds = array_values(array_unique($tagIds));
+        $changes = $news->tags()->sync($tagIds);
+
+        if (!empty($changes['attached'])) {
+            Tag::whereIn('id', $changes['attached'])->increment('usage_count');
+        }
+
+        if (!empty($changes['detached'])) {
+            Tag::whereIn('id', $changes['detached'])
+                ->where('usage_count', '>', 0)
+                ->decrement('usage_count');
+        }
     }
 }

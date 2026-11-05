@@ -1,200 +1,240 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Enums\RoleName;
+use App\Http\Requests\StoreNewsRequest;
+use App\Http\Requests\UpdateNewsRequest;
 use App\Models\Category;
 use App\Models\News;
 use App\Models\Tag;
+use App\Providers\AppServiceProvider;
 use App\Services\MarketDataService;
-use App\Http\Requests\StoreNewsRequest;
-use App\Http\Requests\UpdateNewsRequest;
 use App\Services\NewsService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 
 class HomeController extends Controller
 {
-    protected NewsService $newsService;
+    /** @var list<string> */
+    private const HOMEPAGE_CATEGORY_SLUGS = [
+        'gundem', 'ekonomi', 'spor', 'dunya', 'teknoloji', 'yasam', 'saglik', 'otomobil',
+    ];
 
-    public function __construct(NewsService $newsService)
-    {
-        $this->newsService = $newsService;
-    }
+    public function __construct(
+        protected readonly NewsService $newsService,
+    ) {}
 
     /**
      * ANA SAYFA
      */
-    public function index(Request $request, MarketDataService $marketDataService)
+    public function index(Request $request, MarketDataService $marketDataService): View
     {
-        $categories = Cache::remember('categories.all', 300, function () {
-            return Category::orderBy('name')->get();
-        });
+        $categories = Cache::remember(
+            AppServiceProvider::GLOBAL_CATEGORIES_CACHE_KEY,
+            3600,
+            static fn () => Category::orderBy('name')->get()
+        );
 
-        // ── KATEGORİ VE ARAMA FİLTRESİ ──
         $categorySlug = $request->query('kategori') ?? $request->route('slug');
         $category = null;
-        if ($categorySlug) {
-            $category = Category::where('slug', $categorySlug)->first();
+        if (is_string($categorySlug) && $categorySlug !== '') {
+            $category = $categories->firstWhere('slug', $categorySlug)
+                ?? Category::where('slug', $categorySlug)->first();
         }
 
-        // ── PİYASA VERİLERİ (DİNAMİK) ──
         $marketData = $marketDataService->getMarketData();
 
-        // ── MANŞET HABERLERİ ──
-        $featuredNews = Cache::remember('news.featured.' . ($categorySlug ?? 'all'), 120, function () use ($category) {
-            $query = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->featured()->latest();
-            if ($category) $query->where('category_id', $category->id);
-            $results = $query->limit(10)->get(); 
+        $featuredKey = 'news.featured.' . (is_string($categorySlug) && $categorySlug !== '' ? $categorySlug : 'all');
+        $featuredNews = Cache::remember($featuredKey, 120, static function () use ($category) {
+            $query = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])
+                ->featured()
+                ->latest();
+            if ($category !== null) {
+                $query->where('category_id', $category->id);
+            }
+            $results = $query->limit(10)->get();
 
-            // Eğer manşet yoksa (hepsi silinmişse), en yeni haberleri manşet yap (YEDEK SİSTEM)
             if ($results->isEmpty()) {
-                $fallbackQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
-                if ($category) $fallbackQuery->where('category_id', $category->id);
+                $fallbackQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])
+                    ->published()
+                    ->latest();
+                if ($category !== null) {
+                    $fallbackQuery->where('category_id', $category->id);
+                }
                 $results = $fallbackQuery->limit(10)->get();
             }
+
             return $results;
         });
 
-        // ── SON DAKİKA ──
-        $breakingNews = Cache::remember('news.breaking', 60, function () {
+        $breakingNews = Cache::remember('news.breaking', 60, static function () {
             $results = News::with('category')->breaking()->latest()->limit(10)->get();
             if ($results->isEmpty()) {
                 $results = News::with('category')->published()->latest()->limit(10)->get();
             }
+
             return $results;
         });
 
-        // ── EDİTÖRÜN SEÇTİKLERİ ──
-        $editorPicks = Cache::remember('news.editor_picks', 300, function () {
-            $results = News::with(['categories', 'category', 'user', 'image'])->editorPicks()->latest()->limit(5)->get();
+        $editorPicks = Cache::remember('news.editor_picks', 300, static function () {
+            $results = News::with(['categories', 'category', 'user', 'image'])
+                ->editorPicks()
+                ->latest()
+                ->limit(5)
+                ->get();
             if ($results->isEmpty()) {
-                $results = News::with(['categories', 'category', 'user', 'image'])->published()->inRandomOrder()->limit(5)->get();
+                $results = News::with(['categories', 'category', 'user', 'image'])
+                    ->published()
+                    ->latest()
+                    ->limit(5)
+                    ->get();
             }
+
             return $results;
         });
 
-        // ── EN ÇOK OKUNANLAR (Son 7 gün) ──
-        $mostRead = Cache::remember('news.most_read', 300, function () {
+        $mostRead = Cache::remember('news.most_read', 300, static function () {
             return News::with(['categories', 'category', 'image'])
-                       ->published()->where('created_at', '>=', now()->subDays(7))
-                       ->orderByDesc('views')->limit(10)->get();
+                ->published()
+                ->where('created_at', '>=', now()->subDays(7))
+                ->orderByDesc('views')
+                ->limit(10)
+                ->get();
         });
 
-        // ── KATEGORİ BAZLI HABERLER (Sadece Ana Sayfa için) ──
         $categoryBlocks = [];
-        if (!$category && !$request->filled('search') && !$request->filled('tag')) {
-            $targetCategories = ['gundem', 'ekonomi', 'spor', 'dunya', 'teknoloji', 'yasam', 'saglik', 'otomobil'];
-            
-            foreach ($targetCategories as $slug) {
-                $categoryBlocks[$slug] = Cache::remember('news.category_block.' . $slug, 180, function () use ($slug) {
+        if ($category === null && !$request->filled('search') && !$request->filled('tag')) {
+            foreach (self::HOMEPAGE_CATEGORY_SLUGS as $slug) {
+                $categoryBlocks[$slug] = Cache::remember('news.category_block.' . $slug, 180, static function () use ($slug) {
                     return News::with(['categories', 'category', 'image'])
-                               ->published()
-                               ->whereHas('category', function($q) use ($slug) {
-                                   $q->where('slug', $slug);
-                               })
-                               ->latest()
-                               ->limit(6) // 1 Büyük, 5 Küçük vb.
-                               ->get();
+                        ->published()
+                        ->whereHas('category', static function (Builder $q) use ($slug): void {
+                            $q->where('slug', $slug);
+                        })
+                        ->latest()
+                        ->limit(6)
+                        ->get();
                 });
             }
         }
 
-        // ── TREND ETİKETLER ──
-        $trendingTags = Cache::remember('tags.trending', 600, function () {
+        $trendingTags = Cache::remember('tags.trending', 600, static function () {
             return Tag::orderByDesc('usage_count')->limit(15)->get();
         });
 
-        // ── SON HABERLER VEYA ARAMA SONUÇLARI ──
-        $newsQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])->published()->latest();
+        $newsQuery = News::with(['categories', 'category', 'user', 'image', 'tags', 'newsSource'])
+            ->published()
+            ->latest();
 
-        if ($category) {
+        if ($category !== null) {
             $newsQuery->where('category_id', $category->id);
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
-            $newsQuery->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
-            });
+            $search = mb_substr(trim((string) $request->input('search')), 0, 100, 'UTF-8');
+            if ($search !== '') {
+                $newsQuery->where(static function (Builder $q) use ($search): void {
+                    $q->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
         }
 
         if ($request->filled('tag')) {
-            $newsQuery->whereHas('tags', function ($q) use ($request) {
-                $q->where('slug', $request->tag);
+            $tagSlug = (string) $request->input('tag');
+            $newsQuery->whereHas('tags', static function (Builder $q) use ($tagSlug): void {
+                $q->where('slug', $tagSlug);
             });
         }
 
-        $news = $newsQuery->paginate(12);
+        $news = $newsQuery->paginate(12)->withQueryString();
 
-        $canEditNews = Auth::check() && Auth::user()->hasAnyRole(['Admin', 'Editor', 'Super Admin']);
+        $canEditNews = Auth::check() && Auth::user()?->hasAnyRole(RoleName::staffRoles());
 
         return view('welcome', compact(
-            'categories', 'news', 'category', 'canEditNews',
-            'featuredNews', 'breakingNews', 'editorPicks',
-            'editorPicks', 'mostRead', 'trendingTags', 'categoryBlocks', 'marketData'
+            'categories',
+            'news',
+            'category',
+            'canEditNews',
+            'featuredNews',
+            'breakingNews',
+            'editorPicks',
+            'mostRead',
+            'trendingTags',
+            'categoryBlocks',
+            'marketData'
         ));
     }
 
     /**
      * HABER DETAY SAYFASI
      */
-    public function show($slug)
+    public function show(string $slug): View
     {
-        $news = News::with(['category', 'user', 'image', 'tags', 'comments.user', 'newsSource'])
-                     ->where('slug', $slug)
-                     ->firstOrFail();
+        $canPreviewDrafts = Auth::check() && Auth::user()?->hasAnyRole(RoleName::staffRoles());
 
-        // Görüntülenme sayısını artır (session bazlı)
+        $news = News::with(['categories', 'category', 'user', 'image', 'tags', 'comments.user', 'newsSource'])
+            ->where('slug', $slug)
+            ->when(!$canPreviewDrafts, static fn (Builder $q): Builder => $q->published())
+            ->firstOrFail();
+
         $sessionKey = 'viewed_news_' . $news->id;
         if (!session()->has($sessionKey)) {
-            $news->increment('views');
+            News::whereKey($news->id)->increment('views');
+            $news->views = ((int) $news->views) + 1;
             session()->put($sessionKey, true);
         }
 
-        // Benzer haberler
         $relatedNews = $news->relatedNews(4);
 
-        // En çok okunanlar (sidebar)
         $mostRead = News::with(['category', 'image'])
-                        ->published()
-                        ->where('created_at', '>=', now()->subDays(7))
-                        ->orderByDesc('views')
-                        ->limit(5)
-                        ->get();
+            ->published()
+            ->where('created_at', '>=', now()->subDays(7))
+            ->orderByDesc('views')
+            ->limit(5)
+            ->get();
 
-        // Önceki / Sonraki haber
         $prevNews = News::published()
-                        ->where('id', '<', $news->id)
-                        ->orderByDesc('id')
-                        ->first();
+            ->where('id', '<', $news->id)
+            ->orderByDesc('id')
+            ->first();
 
         $nextNews = News::published()
-                        ->where('id', '>', $news->id)
-                        ->orderBy('id')
-                        ->first();
+            ->where('id', '>', $news->id)
+            ->orderBy('id')
+            ->first();
 
-        // Kategorideki diğer haberler
         $categoryNews = News::with(['image'])
-                            ->published()
-                            ->where('category_id', $news->category_id)
-                            ->where('id', '!=', $news->id)
-                            ->latest()
-                            ->limit(4)
-                            ->get();
+            ->published()
+            ->where('category_id', $news->category_id)
+            ->where('id', '!=', $news->id)
+            ->latest()
+            ->limit(4)
+            ->get();
 
         return view('news.show', compact(
-            'news', 'relatedNews', 'prevNews', 'nextNews', 'categoryNews', 'mostRead'
+            'news',
+            'relatedNews',
+            'prevNews',
+            'nextNews',
+            'categoryNews',
+            'mostRead'
         ));
     }
 
     /**
      * HABER KAYDETME (STORE)
      */
-    public function store(StoreNewsRequest $request)
+    public function store(StoreNewsRequest $request): RedirectResponse
     {
-        $this->newsService->createNews($request->validated(), auth()->id());
+        $this->newsService->createNews($request->validated(), (int) auth()->id());
         $this->clearNewsCache();
 
         return redirect()->route('home')->with('success', 'Haber başarıyla eklendi!');
@@ -203,7 +243,7 @@ class HomeController extends Controller
     /**
      * HABER GÜNCELLEME (UPDATE)
      */
-    public function update(UpdateNewsRequest $request, $id)
+    public function update(UpdateNewsRequest $request, int|string $id): RedirectResponse
     {
         $haber = News::findOrFail($id);
         $this->newsService->updateNews($haber, $request->validated());
@@ -212,16 +252,25 @@ class HomeController extends Controller
         return redirect()->route('news.show', $haber->slug)->with('success', 'Haber başarıyla güncellendi.');
     }
 
-    /**
-     * Cache temizle
-     */
     protected function clearNewsCache(): void
     {
-        Cache::forget('news.featured.all');
-        Cache::forget('news.breaking');
-        Cache::forget('news.editor_picks');
-        Cache::forget('news.most_read');
-        Cache::forget('news.most_commented');
-        Cache::forget('tags.trending');
+        foreach ([
+            'news.featured.all',
+            'news.breaking',
+            'news.editor_picks',
+            'news.most_read',
+            'news.most_commented',
+            'tags.trending',
+            'seo.sitemap.index',
+            'seo.sitemap.news',
+            'seo.rss.feed',
+        ] as $key) {
+            Cache::forget($key);
+        }
+
+        foreach (self::HOMEPAGE_CATEGORY_SLUGS as $slug) {
+            Cache::forget('news.category_block.' . $slug);
+            Cache::forget('news.featured.' . $slug);
+        }
     }
 }

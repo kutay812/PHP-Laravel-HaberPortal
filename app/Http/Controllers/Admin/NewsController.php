@@ -1,121 +1,113 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\News;
-use App\Models\Category;
 use App\Http\Requests\StoreNewsRequest;
 use App\Http\Requests\UpdateNewsRequest;
+use App\Models\Category;
+use App\Models\News;
 use App\Services\NewsService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class NewsController extends Controller
 {
-    protected NewsService $newsService;
-
-    public function __construct(NewsService $newsService)
-    {
-        $this->newsService = $newsService;
+    public function __construct(
+        protected readonly NewsService $newsService,
+    ) {
+        $this->middleware('permission:news.view', ['only' => ['index', 'show', 'search']]);
+        $this->middleware('permission:news.create', ['only' => ['create', 'store']]);
+        $this->middleware('permission:news.edit', ['only' => ['edit', 'update']]);
+        $this->middleware('permission:news.delete', ['only' => ['destroy']]);
+        $this->middleware(['throttle:news-write', 'quota:news_write'], ['only' => ['store', 'update']]);
     }
 
-    /**
-     * Haberleri listele (admin tablosu)
-     */
-    public function index(Request $request)
+    public function index(Request $request): View
     {
-        $query = News::query()
+        $news = News::query()
             ->with(['categories', 'category', 'user'])
-            ->when($request->filled('search'), function($q) use ($request) {
-                $searchTerm = $request->search;
-                $q->where(function($q) use ($searchTerm) {
-                    $q->where('title', 'like', "%{$searchTerm}%")
-                      ->orWhere('description', 'like', "%{$searchTerm}%")
-                      ->orWhereHas('category', function($q) use ($searchTerm) {
-                          $q->where('name', 'like', "%{$searchTerm}%");
-                      });
+            ->when($request->filled('search'), static function (Builder $q) use ($request): void {
+                $searchTerm = (string) $request->input('search');
+                $q->where(static function (Builder $sub) use ($searchTerm): void {
+                    $sub->where('title', 'like', "%{$searchTerm}%")
+                        ->orWhere('description', 'like', "%{$searchTerm}%")
+                        ->orWhereHas('category', static function (Builder $catQ) use ($searchTerm): void {
+                            $catQ->where('name', 'like', "%{$searchTerm}%");
+                        });
                 });
             })
-            ->orderBy('created_at', 'desc');
+            ->orderByDesc('created_at')
+            ->paginate(10)
+            ->withQueryString();
 
-        $news = $query->paginate(10)->withQueryString();
         return view('admin.news.index', compact('news'));
     }
 
-    /**
-     * Haberlerde arama (admin autocomplete/search)
-     */
-    public function search(Request $request)
+    public function search(Request $request): JsonResponse
     {
-        $search = $request->get('search');
-        if (empty($search)) {
+        $search = trim((string) $request->get('search', ''));
+        if ($search === '') {
             return response()->json(['items' => []], 200);
         }
 
         $items = News::query()
             ->with('category')
-            ->where(function($q) use ($search) {
+            ->where(static function (Builder $q) use ($search): void {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhereHas('category', function($q) use ($search) {
-                      $q->where('name', 'like', "%{$search}%");
-                  });
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('category', static function (Builder $catQ) use ($search): void {
+                        $catQ->where('name', 'like', "%{$search}%");
+                    });
             })
-            ->orderBy('created_at', 'desc')
+            ->orderByDesc('created_at')
             ->limit(5)
             ->get()
-            ->map(function($news) {
-                return [
-                    'id' => $news->id,
-                    'text' => $news->title,
-                    'category' => $news->category ? $news->category->name : null
-                ];
-            });
+            ->map(static fn (News $news): array => [
+                'id'       => $news->id,
+                'text'     => $news->title,
+                'category' => $news->category?->name,
+            ]);
 
         return response()->json(['items' => $items], 200);
     }
 
-    /**
-     * Haber detayını göster (admin)
-     */
-    public function show(News $news)
+    public function show(News $news): View
     {
+        $news->load(['category', 'categories', 'user', 'image', 'tags', 'newsSource']);
+
         return view('admin.news.show', compact('news'));
     }
 
-    /**
-     * Haber oluşturma formu (admin)
-     */
-    public function create()
+    public function create(): View
     {
-        $categories = Category::all();
+        $categories = Category::orderBy('name')->get();
+
         return view('admin.news.create', compact('categories'));
     }
 
-    /**
-     * Haber kaydetme (admin)
-     */
-    public function store(StoreNewsRequest $request)
+    public function store(StoreNewsRequest $request): RedirectResponse
     {
-        $this->newsService->createNews($request->validated(), auth()->id());
+        $this->newsService->createNews($request->validated(), (int) auth()->id());
 
         return redirect()->route('admin.news.index')
             ->with('success', 'Haber başarıyla oluşturuldu.');
     }
 
-    /**
-     * Haber düzenleme formu (admin)
-     */
-    public function edit(News $news)
+    public function edit(News $news): View
     {
-        $categories = Category::all();
+        $news->load(['tags', 'image']);
+        $categories = Category::orderBy('name')->get();
+
         return view('admin.news.edit', compact('news', 'categories'));
     }
 
-    /**
-     * Haber güncelleme (admin)
-     */
-    public function update(UpdateNewsRequest $request, News $news)
+    public function update(UpdateNewsRequest $request, News $news): RedirectResponse
     {
         $this->newsService->updateNews($news, $request->validated());
 
@@ -123,10 +115,7 @@ class NewsController extends Controller
             ->with('success', 'Haber başarıyla güncellendi.');
     }
 
-    /**
-     * Haber silme (admin)
-     */
-    public function destroy(News $news)
+    public function destroy(News $news): RedirectResponse
     {
         $this->newsService->deleteNews($news);
 

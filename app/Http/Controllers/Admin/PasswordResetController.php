@@ -1,96 +1,99 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Http\Requests\Admin\ForgotPasswordRequest;
+use App\Http\Requests\Admin\ResetPasswordRequest;
+use App\Mail\AdminPasswordResetMail;
 use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class PasswordResetController extends Controller
 {
-    // Şifre sıfırlama formu (admin)
-    public function showForgotPasswordForm()
+    public function showForgotPasswordForm(): View
     {
         return view('admin.forgot-password');
     }
 
-    // Şifre sıfırlama linkini e-posta ile gönder (admin)
-    public function sendResetLinkEmail(Request $request)
+    public function sendResetLinkEmail(ForgotPasswordRequest $request): RedirectResponse
     {
-        $request->validate([
-            'email' => 'required|email|exists:users,email'
-        ], [
-            'email.required' => 'E-posta adresi gereklidir.',
-            'email.email'    => 'Geçerli bir e-posta adresi giriniz.',
-            'email.exists'   => 'Bu e-posta adresi sistemde kayıtlı değil.'
-        ]);
+        $email = (string) $request->validated('email');
+        $user = User::where('email', $email)->first();
 
-        $token = Str::random(64);
+        // Generic response prevents user enumeration while only mailing registered accounts
+        if ($user !== null) {
+            $token = Str::random(64);
 
-        DB::table('password_reset_tokens')->updateOrInsert(
-            ['email' => $request->email],
-            [
-                'email'      => $request->email,
-                'token'      => Hash::make($token),
-                'created_at' => now()
-            ]
-        );
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $email],
+                [
+                    'email'      => $email,
+                    'token'      => Hash::make($token),
+                    'created_at' => now(),
+                ]
+            );
 
-        // E-posta gönderme işlemini burada yapabilirsin.
-        // $resetUrl = route('admin.password.reset', ['token' => $token]) . '?email=' . urlencode($request->email);
+            $resetUrl = route('admin.password.reset', ['token' => $token]) . '?email=' . urlencode($email);
 
-        return back()->with('status', 'Şifre sıfırlama linki e-posta adresinize gönderildi.');
+            try {
+                Mail::to($email)->send(new AdminPasswordResetMail($resetUrl));
+            } catch (\Throwable $e) {
+                Log::error('Admin password reset mail error: ' . $e->getMessage(), ['email' => $email]);
+            }
+        }
+
+        return back()->with('status', 'Eğer e-posta adresi sistemde kayıtlıysa şifre sıfırlama bağlantısı gönderildi.');
     }
 
-    // Şifre sıfırlama formu (admin)
-    public function showResetPasswordForm(Request $request, $token)
+    public function showResetPasswordForm(Request $request, string $token): View
     {
         return view('admin.reset-password', [
             'token' => $token,
-            'email' => $request->email
+            'email' => $request->query('email'),
         ]);
     }
 
-    // Şifreyi sıfırla (admin)
-    public function resetPassword(Request $request)
+    public function resetPassword(ResetPasswordRequest $request): RedirectResponse
     {
-        $request->validate([
-            'token'    => 'required',
-            'email'    => 'required|email|exists:users,email',
-            'password' => 'required|string|min:8|confirmed',
-        ], [
-            'email.required'    => 'E-posta adresi gereklidir.',
-            'email.email'       => 'Geçerli bir e-posta adresi giriniz.',
-            'email.exists'      => 'Bu e-posta adresi sistemde kayıtlı değil.',
-            'password.required' => 'Şifre gereklidir.',
-            'password.min'      => 'Şifre en az 8 karakter olmalıdır.',
-            'password.confirmed'=> 'Şifre tekrarı eşleşmiyor.',
-            'token.required'    => 'Geçersiz token.'
-        ]);
+        $validated = $request->validated();
+        $email = (string) $validated['email'];
+        $token = (string) $validated['token'];
 
         $passwordReset = DB::table('password_reset_tokens')
-            ->where('email', $request->email)
+            ->where('email', $email)
             ->first();
 
-        if (!$passwordReset || !Hash::check($request->token, $passwordReset->token)) {
+        if ($passwordReset === null || !Hash::check($token, (string) $passwordReset->token)) {
             return back()->withErrors(['email' => 'Geçersiz token veya e-posta adresi.']);
         }
 
-        if (now()->diffInHours($passwordReset->created_at) > 24) {
+        if (Carbon::parse((string) $passwordReset->created_at)->diffInHours(now()) > 24) {
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+
             return back()->withErrors(['email' => 'Şifre sıfırlama linkinin süresi dolmuş.']);
         }
 
-        $user = User::where('email', $request->email)->first();
-        $user->password = Hash::make($request->password);
+        $user = User::where('email', $email)->firstOrFail();
+        $user->password = (string) $validated['password'];
         $user->setRememberToken(Str::random(60));
         $user->save();
 
-        DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+        DB::table('password_reset_tokens')->where('email', $email)->delete();
 
-        return redirect()->route('admin.login')->with('status', 'Şifreniz başarıyla sıfırlandı. Yeni şifrenizle giriş yapabilirsiniz.');
+        return redirect()->route('admin.login')->with(
+            'status',
+            'Şifreniz başarıyla sıfırlandı. Yeni şifrenizle giriş yapabilirsiniz.'
+        );
     }
 }

@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Policies;
 
+use App\Enums\RoleName;
 use App\Models\News;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
@@ -10,35 +13,33 @@ class NewsPolicy
 {
     use HandlesAuthorization;
 
-    public function before($user, $ability)
+    public function before(User $user, string $ability): ?bool
     {
-        if ($user->hasRole('super-admin')) {
-            return true;
-        }
+        return $user->hasRole(RoleName::SuperAdmin->value) ? true : null;
     }
 
-    public function viewAny(User $user)
+    public function viewAny(User $user): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('news.view') || $user->hasAnyRole(RoleName::staffRoles());
     }
 
-    public function view(User $user, News $news)
+    public function view(User $user, News $news): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('news.view') || $user->hasAnyRole(RoleName::staffRoles());
     }
 
-    public function create(User $user)
+    public function create(User $user): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('news.create') || $user->hasAnyRole(RoleName::staffRoles());
     }
 
-    public function update(User $user, News $news)
+    public function update(User $user, News $news): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('news.edit') || $user->hasAnyRole(RoleName::staffRoles());
     }
 
-    public function delete(User $user, News $news)
+    public function delete(User $user, News $news): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('news.delete') || $user->hasAnyRole(RoleName::staffRoles());
     }
-} 
+}

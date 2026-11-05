@@ -1,36 +1,37 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\User;
 use App\Services\UserService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 
 class ProfileController extends Controller
 {
-    protected UserService $userService;
-
-    public function __construct(UserService $userService)
-    {
+    public function __construct(
+        protected readonly UserService $userService,
+    ) {
         $this->middleware('auth');
-        $this->userService = $userService;
     }
 
-    public function show()
+    public function show(): View
     {
+        /** @var User $user */
         $user = Auth::user();
-        $roles = method_exists($user, 'roles') ? $user->roles->pluck('name')->toArray() : ['Kullanıcı'];
+        $roles = $user->roles->pluck('name')->all();
+
         return view('profile', compact('user', 'roles'));
     }
 
-    public function update(ProfileUpdateRequest $request)
+    public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        /** @var User $user */
         $user = Auth::user();
-        
-        // Delegate to UserService (note that UserService->profileEdit is the repository implementation,
-        // but we can directly update attributes cleanly or use profileEdit.
-        // Let's use direct updating properties or call profileEdit depending on format)
-        
         $this->userService->profileEdit($user, $request->validated());
 
         return redirect('/')->with('success', 'Profiliniz başarıyla güncellendi.');

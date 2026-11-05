@@ -1,46 +1,54 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
 use App\Mail\ContactMail;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Queue\SerializesModels;
-use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class MailQueue implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $email;
-    public string $name;
-    public string $body;
+    public int $tries = 2;
+    public int $maxExceptions = 1;
+    public int $timeout = 30;
+
+    public function __construct(
+        public string $email,
+        public ?string $name = null,
+        public ?string $subject = null,
+        public string $body = '',
+    ) {}
 
     /**
-     * Create a new job instance.
+     * @return list<int>
      */
-    public function __construct(string $email, string $name, string $body = '')
+    public function backoff(): array
     {
-        $this->email = $email;
-        $this->name  = $name;
-        $this->body  = $body;
+        return [30, 120];
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(): void
     {
         try {
             Log::info("MailQueue: Mail gönderiliyor → {$this->email}");
-            Mail::to($this->email)->send(new ContactMail($this->body));
+            Mail::to($this->email)->send(new ContactMail(
+                name: $this->name ?? '',
+                subjectLine: $this->subject ?? 'Haber Portalı Bildirimi',
+                messageBody: $this->body,
+            ));
             Log::info("MailQueue: Mail gönderildi → {$this->email}");
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error("MailQueue: Mail gönderilemedi → {$this->email}, Hata: " . $e->getMessage());
-            // throw $e; // İstersen kuyrukta yeniden denenmesini istersen açabilirsin
+            throw $e;
         }
     }
 }

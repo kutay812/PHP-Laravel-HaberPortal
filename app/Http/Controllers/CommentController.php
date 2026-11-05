@@ -1,33 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SaveCommentRequest;
 use App\Models\Comment;
 use App\Models\News;
 use App\Services\CommentService;
-use Illuminate\Http\Request;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 
 class CommentController extends Controller
 {
-    protected CommentService $commentService;
+    public function __construct(
+        protected readonly CommentService $commentService,
+    ) {}
 
-    public function __construct(CommentService $commentService)
+    public function store(SaveCommentRequest $request, News $news): RedirectResponse
     {
-        $this->commentService = $commentService;
-    }
-
-    public function store(Request $request, News $news)
-    {
-        $request->validate([
-            'content' => 'required|string|max:1000',
-        ]);
-
-        $this->commentService->storeComment($news, $request->content);
+        $this->commentService->storeComment($news, (string) $request->validated('content'));
 
         return back()->with('success', 'Yorumunuz eklendi.');
     }
 
-    public function edit(Comment $comment)
+    public function edit(Comment $comment): View
     {
         if (!$this->commentService->userCanModify($comment)) {
             abort(403);
@@ -36,11 +33,9 @@ class CommentController extends Controller
         return view('comments.edit', compact('comment'));
     }
 
-    public function update(Request $request, Comment $comment)
+    public function update(SaveCommentRequest $request, Comment $comment): RedirectResponse
     {
-        $request->validate(['content' => 'required|string|max:1000']);
-
-        $this->commentService->updateComment($comment, $request->content);
+        $this->commentService->updateComment($comment, (string) $request->validated('content'));
 
         if ($comment->news) {
             return redirect()->route('news.show', $comment->news->slug)->with('success', 'Yorum güncellendi.');
@@ -49,7 +44,7 @@ class CommentController extends Controller
         return redirect()->back()->with('success', 'Yorum güncellendi.');
     }
 
-    public function destroy(Comment $comment)
+    public function destroy(Comment $comment): RedirectResponse
     {
         $this->commentService->deleteComment($comment);
 

@@ -1,11 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RoleName;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 
@@ -19,66 +26,73 @@ class UserController extends Controller
         $this->middleware('permission:users.delete', ['only' => ['destroy']]);
     }
 
-    // Kullanıcıları listele (admin)
-    public function index(Request $request)
+    public function index(Request $request): View
     {
         $users = User::query()
             ->with('roles')
-            ->when($request->filled('search'), function($q) use ($request) {
-                $searchTerm = $request->search;
-                $q->where(function($q) use ($searchTerm) {
-                    $q->where('name', 'like', "%{$searchTerm}%")
-                      ->orWhere('email', 'like', "%{$searchTerm}%");
+            ->when($request->filled('search'), static function (Builder $q) use ($request): void {
+                $searchTerm = (string) $request->input('search');
+                $q->where(static function (Builder $sub) use ($searchTerm): void {
+                    $sub->where('name', 'like', "%{$searchTerm}%")
+                        ->orWhere('email', 'like', "%{$searchTerm}%");
                 });
             })
-            ->orderBy('created_at', 'desc')
+            ->orderByDesc('created_at')
             ->paginate(10)
             ->withQueryString();
 
         return view('admin.users.index', compact('users'));
     }
 
-    // Kullanıcı oluşturma formu (admin)
-    public function create()
+    public function create(): View
     {
-        $roles = Role::where('name', '!=', 'Super Admin')->get();
+        $isSuperAdmin = auth()->user()?->hasRole(RoleName::SuperAdmin->value) ?? false;
+        $roles = Role::query()
+            ->when(!$isSuperAdmin, static fn (Builder $q): Builder => $q->where('name', '!=', RoleName::SuperAdmin->value))
+            ->get();
+
         return view('admin.users.create', compact('roles'));
     }
 
-    // Kullanıcı kaydet (admin)
-    public function store(StoreUserRequest $request)
+    public function store(StoreUserRequest $request): RedirectResponse
     {
         $validated = $request->validated();
 
         $user = User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
-            'password' => bcrypt($validated['password']),
+            'password' => $validated['password'],
         ]);
 
-        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->toArray();
-        $user->assignRole($roleNames);
+        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->all();
+        // syncRoles replaces the default 'User' role assigned in User::booted()
+        $user->syncRoles($roleNames);
 
         return redirect()->route('admin.users.index')
             ->with('success', 'Kullanıcı başarıyla oluşturuldu.');
     }
 
-    // Kullanıcı düzenleme formu (admin)
-    public function edit(User $user)
+    public function edit(User $user): View|RedirectResponse
     {
-        if ($user->hasRole('Super Admin') && !auth()->user()->hasRole('Super Admin')) {
+        $isSuperAdmin = auth()->user()?->hasRole(RoleName::SuperAdmin->value) ?? false;
+
+        if ($user->hasRole(RoleName::SuperAdmin->value) && !$isSuperAdmin) {
             return redirect()->route('admin.users.index')
                 ->with('error', 'Super Admin kullanıcılarını düzenleme yetkiniz yok.');
         }
 
-        $roles = Role::where('name', '!=', 'Super Admin')->get();
+        $roles = Role::query()
+            ->when(!$isSuperAdmin, static fn (Builder $q): Builder => $q->where('name', '!=', RoleName::SuperAdmin->value))
+            ->get();
+
         return view('admin.users.edit', compact('user', 'roles'));
     }
 
-    // Kullanıcı güncelle (admin)
-    public function update(UpdateUserRequest $request, User $user)
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
-        if ($user->hasRole('Super Admin') && !auth()->user()->hasRole('Super Admin')) {
+        $isSuperAdmin = auth()->user()?->hasRole(RoleName::SuperAdmin->value) ?? false;
+
+        if ($user->hasRole(RoleName::SuperAdmin->value) && !$isSuperAdmin) {
             return redirect()->route('admin.users.index')
                 ->with('error', 'Super Admin kullanıcılarını düzenleme yetkiniz yok.');
         }
@@ -91,20 +105,19 @@ class UserController extends Controller
         ]);
 
         if (!empty($validated['password'])) {
-            $user->update(['password' => bcrypt($validated['password'])]);
+            $user->update(['password' => $validated['password']]);
         }
 
-        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->toArray();
+        $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->all();
         $user->syncRoles($roleNames);
 
         return redirect()->route('admin.users.index')
             ->with('success', 'Kullanıcı başarıyla güncellendi.');
     }
 
-    // Kullanıcı sil (admin)
-    public function destroy(User $user)
+    public function destroy(User $user): RedirectResponse
     {
-        if ($user->hasRole('Super Admin')) {
+        if ($user->hasRole(RoleName::SuperAdmin->value)) {
             return back()->with('error', 'Super Admin kullanıcıları silinemez.');
         }
 
@@ -118,30 +131,27 @@ class UserController extends Controller
             ->with('success', 'Kullanıcı başarıyla silindi.');
     }
 
-    // Kullanıcı arama (admin autocomplete/search)
-    public function search(Request $request)
+    public function search(Request $request): JsonResponse
     {
-        $search = $request->get('search');
-        if (empty($search)) {
+        $search = trim((string) $request->get('search', ''));
+        if ($search === '') {
             return response()->json(['items' => []], 200);
         }
 
         $items = User::query()
             ->with('roles')
-            ->where(function($q) use ($search) {
+            ->where(static function (Builder $q) use ($search): void {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%");
             })
-            ->orderBy('created_at', 'desc')
+            ->orderByDesc('created_at')
             ->limit(5)
             ->get()
-            ->map(function($user) {
-                return [
-                    'id'   => $user->id,
-                    'text' => $user->name,
-                    'category' => $user->email
-                ];
-            });
+            ->map(static fn (User $user): array => [
+                'id'       => $user->id,
+                'text'     => $user->name,
+                'category' => $user->email,
+            ]);
 
         return response()->json(['items' => $items], 200);
     }

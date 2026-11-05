@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Comment extends Model
 {
@@ -15,14 +18,18 @@ class Comment extends Model
         'content',
     ];
 
-    // YORUM > KULLANICI ilişkisi
-    public function user()
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    // YORUM > HABER ilişkisi
-    public function news()
+    /**
+     * @return BelongsTo<News, $this>
+     */
+    public function news(): BelongsTo
     {
         return $this->belongsTo(News::class);
     }

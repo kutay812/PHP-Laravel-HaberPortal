@@ -12,13 +12,20 @@
     </div>
 
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
             {{ session('success') }}
-            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Kapat"><span aria-hidden="true">&times;</span></button>
         </div>
     @endif
 
-    <div class="card shadow-sm max-w-4xl">
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Kapat"><span aria-hidden="true">&times;</span></button>
+        </div>
+    @endif
+
+    <div class="card shadow-sm">
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
@@ -35,32 +42,32 @@
                         @forelse($tags as $tag)
                             <tr>
                                 <td>
-                                    <span class="badge text-white" style="background-color: {{ $tag->color }}">{{ $tag->name }}</span>
+                                    <span class="badge text-white" style="background-color: {{ $tag->color ?? '#3498db' }}">{{ $tag->name }}</span>
                                 </td>
                                 <td><code>{{ $tag->slug }}</code></td>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        <div class="rounded-circle border mr-2" style="width: 20px; height: 20px; background-color: {{ $tag->color }}"></div>
-                                        <small>{{ $tag->color }}</small>
+                                        <div class="rounded-circle border mr-2" style="width: 20px; height: 20px; background-color: {{ $tag->color ?? '#3498db' }}"></div>
+                                        <small>{{ $tag->color ?? '#3498db' }}</small>
                                     </div>
                                 </td>
-                                <td><span class="badge badge-secondary py-1.5 px-2">{{ $tag->usage_count }} haber</span></td>
+                                <td><span class="badge badge-primary">{{ $tag->usage_count }} haber</span></td>
                                 <td>
                                     <div class="d-flex gap-2">
-                                        <a href="{{ route('admin.tags.edit', $tag) }}" 
+                                        <a href="{{ route('admin.tags.edit', $tag) }}"
                                            class="btn btn-xs btn-outline-primary mr-1"
                                            title="Düzenle">
                                             <i class="fas fa-edit fa-sm"></i>
                                         </a>
 
-                                        <form action="{{ route('admin.tags.destroy', $tag) }}" 
-                                              method="POST" 
+                                        <form action="{{ route('admin.tags.destroy', $tag) }}"
+                                              method="POST"
                                               class="d-inline"
                                               onsubmit="return confirm('Bu etiketi silmek istediğinizden emin misiniz?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" 
-                                                    class="btn btn-xs btn-outline-danger" 
+                                            <button type="submit"
+                                                    class="btn btn-xs btn-outline-danger"
                                                     title="Sil">
                                                 <i class="fas fa-trash fa-sm"></i>
                                             </button>

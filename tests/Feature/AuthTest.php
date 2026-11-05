@@ -1,10 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
+use App\Mail\AdminPasswordResetMail;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -14,24 +18,15 @@ class AuthTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
-        // Create the default User role required by model boot event
-        Role::create(['name' => 'User']);
+
+        $this->seed(PermissionSeeder::class);
     }
 
-    /**
-     * Test successful login
-     */
     public function test_user_can_login_with_correct_credentials(): void
     {
-        $this->withoutMiddleware([
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class
-        ]);
-
         $user = User::factory()->create([
             'email'    => 'testuser@example.com',
-            'password' => bcrypt('password123'),
+            'password' => 'password123',
         ]);
 
         $response = $this->post(route('login.submit'), [
@@ -43,19 +38,11 @@ class AuthTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
-    /**
-     * Test invalid login validation errors
-     */
     public function test_user_cannot_login_with_incorrect_credentials(): void
     {
-        $this->withoutMiddleware([
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class
-        ]);
-
-        $user = User::factory()->create([
+        User::factory()->create([
             'email'    => 'testuser@example.com',
-            'password' => bcrypt('password123'),
+            'password' => 'password123',
         ]);
 
         $response = $this->post(route('login.submit'), [
@@ -67,16 +54,8 @@ class AuthTest extends TestCase
         $this->assertGuest();
     }
 
-    /**
-     * Test registration validations and creation
-     */
     public function test_user_can_register_successfully(): void
     {
-        $this->withoutMiddleware([
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class
-        ]);
-
         $response = $this->post(route('register.submit'), [
             'name'                  => 'New User',
             'email'                 => 'newuser@example.com',
@@ -89,5 +68,30 @@ class AuthTest extends TestCase
             'email' => 'newuser@example.com',
             'name'  => 'New User',
         ]);
+    }
+
+    public function test_admin_forgot_password_queues_reset_email_without_user_enumeration(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create([
+            'email' => 'adminreset@example.com',
+        ]);
+
+        $response = $this->post(route('admin.password.email'), [
+            'email' => $user->email,
+        ]);
+
+        $response->assertSessionHas('status');
+        Mail::assertQueued(AdminPasswordResetMail::class, static function (AdminPasswordResetMail $mail) use ($user): bool {
+            return $mail->hasTo($user->email) && str_contains($mail->resetUrl, 'reset-password/');
+        });
+
+        // Unknown email returns identical status without sending mail (anti-enumeration)
+        $unknownResponse = $this->post(route('admin.password.email'), [
+            'email' => 'nobody@example.com',
+        ]);
+        $unknownResponse->assertSessionHas('status');
+        Mail::assertQueuedCount(1);
     }
 }

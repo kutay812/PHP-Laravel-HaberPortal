@@ -1,5 +1,5 @@
 {!! '<' . '?xml version="1.0" encoding="UTF-8"?' . '>' !!}
-<rss version="2.0" 
+<rss version="2.0"
      xmlns:content="http://purl.org/rss/1.0/modules/content/"
      xmlns:wfw="http://wellformedweb.org/CommentAPI/"
      xmlns:dc="http://purl.org/dc/elements/1.1/"
@@ -18,16 +18,17 @@
     <sy:updatePeriod>hourly</sy:updatePeriod>
     <sy:updateFrequency>1</sy:updateFrequency>
 
+    @php($sanitizer = app(\App\Services\HtmlSanitizerService::class))
     @foreach($news as $item)
         <item>
             <title>{{ e($item->title) }}</title>
             <link>{{ route('news.show', $item->slug) }}</link>
-            <dc:creator><![CDATA[{{ $item->user ? $item->user->name : ($item->newsSource ? $item->newsSource->name : 'Editör') }}]]></dc:creator>
+            <dc:creator><![CDATA[{!! str_replace(']]>', ']]]]><![CDATA[>', $item->user ? $item->user->name : ($item->newsSource ? $item->newsSource->name : 'Editör')) !!}]]></dc:creator>
             <pubDate>{{ $item->created_at->toRssString() }}</pubDate>
-            <category><![CDATA[{{ $item->category?->name ?? 'Gündem' }}]]></category>
+            <category><![CDATA[{!! str_replace(']]>', ']]]]><![CDATA[>', $item->category?->name ?? 'Gündem') !!}]]></category>
             <guid isPermaLink="false">{{ route('news.show', $item->slug) }}</guid>
-            <description><![CDATA[{{ $item->description }}]]></description>
-            <content:encoded><![CDATA[{!! $item->content !!}]]></content:encoded>
+            <description><![CDATA[{!! str_replace(']]>', ']]]]><![CDATA[>', strip_tags((string) $item->description)) !!}]]></description>
+            <content:encoded><![CDATA[{!! $sanitizer->sanitizeForCdata($item->content) !!}]]></content:encoded>
             @if($item->image)
                 <media:content url="{{ $item->image_url }}" medium="image" width="800" height="450" />
             @endif

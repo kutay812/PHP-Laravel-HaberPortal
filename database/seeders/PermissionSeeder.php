@@ -1,21 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
+use App\Enums\RoleName;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class PermissionSeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         $permissions = [
-            // Kullanıcı yönetimi
             'users.view', 'users.create', 'users.edit', 'users.delete',
-            // Haber yönetimi
             'news.view', 'news.create', 'news.edit', 'news.delete',
-            // Kategori yönetimi
             'categories.view', 'categories.create', 'categories.edit', 'categories.delete',
         ];
 
@@ -23,20 +26,18 @@ class PermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        $superAdmin = Role::firstOrCreate(['name' => 'Super Admin']);
-        $admin      = Role::firstOrCreate(['name' => 'Admin']);
-        $editor     = Role::firstOrCreate(['name' => 'Editor']);
-        $user       = Role::firstOrCreate(['name' => 'User']); // YENİ
+        $superAdmin = Role::firstOrCreate(['name' => RoleName::SuperAdmin->value]);
+        $admin = Role::firstOrCreate(['name' => RoleName::Admin->value]);
+        $editor = Role::firstOrCreate(['name' => RoleName::Editor->value]);
+        Role::firstOrCreate(['name' => RoleName::User->value]);
 
-        $superAdmin->givePermissionTo(Permission::all());
-        $admin->givePermissionTo([
-            'users.view', 'users.create', 'users.edit', 'users.delete',
+        $superAdmin->syncPermissions(Permission::all());
+        $admin->syncPermissions($permissions);
+        $editor->syncPermissions([
             'news.view', 'news.create', 'news.edit', 'news.delete',
-            'categories.view', 'categories.create', 'categories.edit', 'categories.delete',
+            'categories.view',
         ]);
-        $editor->givePermissionTo([
-            'news.view', 'news.create', 'news.edit', 'news.delete',
-        ]);
-        // User rolüne hiçbir izin verilmedi!
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 }

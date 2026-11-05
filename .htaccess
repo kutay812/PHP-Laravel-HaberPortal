@@ -1,0 +1,24 @@
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(\.env.*|\.git.*|\.editorconfig|artisan|composer\.(json|lock)|package(-lock)?\.json|phpstan\.neon|phpunit\.xml|vite\.config\.js)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    Options -Indexes -MultiViews
+    RewriteEngine On
+
+    # Gizli dosya ve dizinlere (.env, .git, .agents vb.) erişimi kesin olarak engelle
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # İç uygulama klasörlerine ve özel storage alt dizinlerine doğrudan HTTP erişimini engelle
+    RewriteRule ^(app|bootstrap|config|database|node_modules|resources|routes|tests|vendor)(/|$) - [F,L,NC]
+    RewriteRule ^storage/(app|framework|logs|pail)(/|$) - [F,L,NC]
+    RewriteRule ^storage/?$ - [F,L,NC]
+    RewriteRule ^(artisan|composer\.(json|lock)|package(-lock)?\.json|phpstan\.neon|phpunit\.xml|vite\.config\.js)$ - [F,L,NC]
+
+    # Kök dizin isteğini alt dizin bağlamını koruyarak public/ altına yönlendir
+    RewriteRule ^$ %{REQUEST_URI}public/ [L,R=302]
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L,QSA]
+</IfModule>

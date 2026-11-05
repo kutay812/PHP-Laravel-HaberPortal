@@ -1,11 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Enums\RoleName;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -26,37 +31,34 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'password'          => 'hashed',
     ];
 
-    // HABERLER: Kullanıcının oluşturduğu haberler
-    public function news()
+    public function news(): HasMany
     {
         return $this->hasMany(News::class);
     }
 
-    // YORUMLAR: Kullanıcının yaptığı yorumlar
-    public function comments()
+    public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
     }
 
-    // Profil resmi yolunu döndürür
-    public function getProfileImageUrlAttribute()
+    public function getProfileImageUrlAttribute(): string
     {
         if ($this->profile_image) {
             return asset('storage/' . $this->profile_image);
         }
+
         return asset('storage/adminlte/dist/img/user2-160x160.jpg');
     }
 
-    // Otomatik User rolü ataması
-    protected static function booted()
+    protected static function booted(): void
     {
-        static::created(function ($user) {
-            if (!$user->roles()->count()) {
-                \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'User']);
-                $user->assignRole('User');
+        static::created(static function (self $user): void {
+            if (!$user->roles()->exists()) {
+                Role::firstOrCreate(['name' => RoleName::User->value]);
+                $user->assignRole(RoleName::User->value);
             }
         });
     }

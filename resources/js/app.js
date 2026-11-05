@@ -19,6 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Mega menu logic
     setupMegaMenu();
+
+    // Mobile drawer menu logic
+    setupMobileMenu();
 });
 
 function applyTheme(theme) {
@@ -192,4 +195,32 @@ function setupMegaMenu() {
             }
         });
     }
+}
+
+// Mobile Menu setup
+function setupMobileMenu() {
+    const openBtn = document.getElementById('mobile-menu-open');
+    const closeBtn = document.getElementById('mobile-menu-close');
+    const backdrop = document.getElementById('mobile-menu-backdrop');
+    const overlay = document.getElementById('mobile-menu-overlay');
+
+    if (!overlay) return;
+
+    const setOpen = (isOpen) => {
+        overlay.classList.toggle('hidden', !isOpen);
+        document.body.classList.toggle('overflow-hidden', isOpen);
+        if (openBtn) {
+            openBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        }
+    };
+
+    if (openBtn) openBtn.addEventListener('click', () => setOpen(true));
+    if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+    if (backdrop) backdrop.addEventListener('click', () => setOpen(false));
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
+            setOpen(false);
+        }
+    });
 }

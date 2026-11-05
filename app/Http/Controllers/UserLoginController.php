@@ -1,30 +1,31 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Http\Requests\UserLoginRequest;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class UserLoginController extends Controller
 {
-    // Giriş formunu göster
-    public function showLoginForm()
+    public function showLoginForm(): View
     {
         return view('auth.login');
     }
 
-    // Giriş işlemi
-    public function login(Request $request)
+    public function login(UserLoginRequest $request): RedirectResponse
     {
-        $credentials = $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
+        $credentials = $request->only('email', 'password');
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
-            return redirect()->route('home')->with('success', 'Hoş geldiniz!');
+            $request->session()->save();
+
+            return redirect()->intended(route('home'), 303)->with('success', 'Hoş geldiniz!');
         }
 
         return back()->withErrors([
@@ -32,14 +33,12 @@ class UserLoginController extends Controller
         ])->onlyInput('email');
     }
 
-    // Çıkış işlemi
-    public function logout(Request $request)
+    public function logout(Request $request): RedirectResponse
     {
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        // Anasayfaya yönlendir!
+
         return redirect('/')->with('success', 'Çıkış yapıldı.');
-        // Alternatif: return redirect()->route('home')->with('success', 'Çıkış yapıldı.');
     }
 }

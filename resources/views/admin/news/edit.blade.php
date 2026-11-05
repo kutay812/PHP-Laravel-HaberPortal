@@ -1,19 +1,38 @@
 @extends('layouts.admin.app')
 
+@section('title', 'Haber Düzenle')
+
 @section('content')
 <div class="container-fluid">
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800">Haber Düzenle</h1>
-        <a href="{{ route('admin.news.index') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> Geri Dön
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('news.show', $news->slug) }}" target="_blank" rel="noopener" class="btn btn-outline-primary mr-2">
+                <i class="fas fa-external-link-alt mr-1"></i> Sitede Gör
+            </a>
+            <a href="{{ route('admin.news.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left mr-1"></i> Geri Dön
+            </a>
+        </div>
     </div>
 
-    <!-- Content Row -->
     <div class="card shadow mb-4">
         <div class="card-body">
-            <form action="{{ route('admin.news.update', $news) }}" method="POST" enctype="multipart/form-data">
+            @if($errors->any())
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <ul class="mb-0">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Kapat">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            @endif
+
+            <form id="editNewsForm" action="{{ route('admin.news.update', $news) }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
 
@@ -21,9 +40,9 @@
                     <div class="col-md-8">
                         <!-- Title -->
                         <div class="mb-3">
-                            <label for="title" class="form-label">Başlık</label>
-                            <input type="text" class="form-control @error('title') is-invalid @enderror" 
-                                   id="title" name="title" value="{{ old('title', $news->title) }}" required>
+                            <label for="title" class="form-label">Başlık *</label>
+                            <input type="text" class="form-control @error('title') is-invalid @enderror"
+                                   id="title" name="title" value="{{ old('title', $news->title) }}" required minlength="5">
                             @error('title')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -31,9 +50,9 @@
 
                         <!-- Description -->
                         <div class="mb-3">
-                            <label for="description" class="form-label">Açıklama</label>
-                            <textarea class="form-control @error('description') is-invalid @enderror" 
-                                      id="description" name="description" rows="3" required>{{ old('description', $news->description) }}</textarea>
+                            <label for="description" class="form-label">Kısa Özet (Açıklama) *</label>
+                            <textarea class="form-control @error('description') is-invalid @enderror"
+                                      id="description" name="description" rows="3" required minlength="10">{{ old('description', $news->description) }}</textarea>
                             @error('description')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -41,9 +60,9 @@
 
                         <!-- Content -->
                         <div class="mb-3">
-                            <label for="content" class="form-label">İçerik</label>
-                            <textarea class="form-control @error('content') is-invalid @enderror" 
-                                      id="content" name="content" rows="10" required>{{ old('content', $news->content) }}</textarea>
+                            <label for="content" class="form-label">Haber İçeriği *</label>
+                            <textarea class="form-control @error('content') is-invalid @enderror"
+                                      id="content" name="content" rows="12" required minlength="30">{{ old('content', $news->content) }}</textarea>
                             @error('content')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -53,13 +72,13 @@
                     <div class="col-md-4">
                         <!-- Category -->
                         <div class="mb-3">
-                            <label for="category_id" class="form-label">Kategori</label>
-                            <select class="form-select @error('category_id') is-invalid @enderror" 
+                            <label for="category_id" class="form-label">Kategori *</label>
+                            <select class="form-select @error('category_id') is-invalid @enderror"
                                     id="category_id" name="category_id" required>
                                 <option value="">Kategori Seçin</option>
                                 @foreach($categories as $category)
-                                    <option value="{{ $category->id }}" 
-                                            {{ old('category_id', $news->category_id) == $category->id ? 'selected' : '' }}>
+                                    <option value="{{ $category->id }}"
+                                            {{ (string) old('category_id', $news->category_id) === (string) $category->id ? 'selected' : '' }}>
                                         {{ $category->name }}
                                     </option>
                                 @endforeach
@@ -69,45 +88,79 @@
                             @enderror
                         </div>
 
-                        <!-- Mevcut Resim (Önizleme) -->
+                        <!-- Etiketler -->
+                        <div class="mb-3">
+                            <label for="tags" class="form-label">Etiketler (virgülle ayırın)</label>
+                            <input type="text" class="form-control @error('tags') is-invalid @enderror"
+                                   id="tags" name="tags" value="{{ old('tags', $news->tags->pluck('name')->join(', ')) }}" placeholder="örn: ekonomi, borsa">
+                            @error('tags')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <!-- Mevcut Resim -->
                         <div class="mb-3">
                             <label class="form-label">Mevcut Görsel</label>
-                            <div id="image-preview" class="mt-2">
+                            <div id="image-preview" class="mt-1">
                                 @if($news->image_url)
-                                    <img src="{{ $news->image_url }}" 
-                                         alt="Seçili görsel" 
-                                         class="img-thumbnail">
+                                    <img src="{{ $news->image_url }}"
+                                         alt="Seçili görsel"
+                                         class="img-thumbnail"
+                                         style="max-width: 220px;">
                                 @else
-                                    <div class="text-muted">Henüz görsel yok.</div>
+                                    <div class="text-muted small">Henüz görsel yok.</div>
                                 @endif
                             </div>
                         </div>
 
-                        <!-- Yeni Görsel Yükle (Dosya Seç) -->
+                        <!-- Yeni Görsel Yükle -->
                         <div class="mb-3">
                             <label for="new_image" class="form-label">Yeni Görsel Yükle (İsteğe bağlı)</label>
-                            <input type="file" class="form-control @error('new_image') is-invalid @enderror" 
+                            <input type="file" class="form-control @error('new_image') is-invalid @enderror"
                                    id="new_image" name="new_image" accept="image/*">
                             @error('new_image')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
-                            <small class="text-muted">Yeni bir resim yüklersen, haberin görseli değişir.</small>
+                            <small class="text-muted">Yeni bir görsel yüklerseniz mevcut görsel değiştirilir.</small>
+                        </div>
+
+                        <!-- Editorial Placement Flags -->
+                        <div class="mb-3 p-3 bg-light rounded">
+                            <label class="form-label d-block mb-2">Vitrin Konumu</label>
+
+                            <input type="hidden" name="is_featured" value="0">
+                            <div class="custom-control custom-switch mb-2">
+                                <input type="checkbox" class="custom-control-input" id="is_featured" name="is_featured" value="1" @checked(old('is_featured', $news->is_featured))>
+                                <label class="custom-control-label" for="is_featured">Manşette Göster</label>
+                            </div>
+
+                            <input type="hidden" name="is_breaking" value="0">
+                            <div class="custom-control custom-switch mb-2">
+                                <input type="checkbox" class="custom-control-input" id="is_breaking" name="is_breaking" value="1" @checked(old('is_breaking', $news->is_breaking))>
+                                <label class="custom-control-label" for="is_breaking">Son Dakika Bandı</label>
+                            </div>
+
+                            <input type="hidden" name="is_editor_pick" value="0">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="is_editor_pick" name="is_editor_pick" value="1" @checked(old('is_editor_pick', $news->is_editor_pick))>
+                                <label class="custom-control-label" for="is_editor_pick">Editörün Seçimi</label>
+                            </div>
                         </div>
 
                         <!-- Status -->
-                        <div class="mb-3">
-                            <label class="form-label d-block">Durum</label>
+                        <div class="mb-4">
+                            <label class="form-label d-block">Yayın Durumu</label>
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" 
-                                       name="is_active" id="active" value="1" 
-                                       {{ old('is_active', $news->is_active) ? 'checked' : '' }}>
-                                <label class="form-check-label" for="active">Aktif</label>
+                                <input class="form-check-input" type="radio"
+                                       name="is_active" id="active" value="1"
+                                       {{ (bool) old('is_active', $news->is_active) ? 'checked' : '' }}>
+                                <label class="form-check-label" for="active">Yayında (Aktif)</label>
                             </div>
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" 
-                                       name="is_active" id="inactive" value="0" 
-                                       {{ old('is_active', $news->is_active) ? '' : 'checked' }}>
-                                <label class="form-check-label" for="inactive">Pasif</label>
+                                <input class="form-check-input" type="radio"
+                                       name="is_active" id="inactive" value="0"
+                                       {{ (bool) old('is_active', $news->is_active) ? '' : 'checked' }}>
+                                <label class="form-check-label" for="inactive">Taslak (Pasif)</label>
                             </div>
                             @error('is_active')
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
@@ -115,100 +168,13 @@
                         </div>
 
                         <!-- Submit Button -->
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary" id="submitBtn">
-                                <i class="fas fa-save me-2"></i>Kaydet
-                            </button>
-                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+                            <i class="fas fa-save me-2"></i>Değişiklikleri Kaydet
+                        </button>
                     </div>
                 </div>
             </form>
         </div>
     </div>
 </div>
-
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form');
-    const submitBtn = document.getElementById('submitBtn');
-
-    // Form submission handling
-    if (form && submitBtn) {
-        form.addEventListener('submit', function(e) {
-            // Form validasyonu
-            const requiredFields = form.querySelectorAll('[required]');
-            let isValid = true;
-
-            requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                    isValid = false;
-                    field.classList.add('is-invalid');
-                } else {
-                    field.classList.remove('is-invalid');
-                }
-            });
-
-            if (!isValid) {
-                e.preventDefault();
-                alert('Lütfen tüm gerekli alanları doldurun!');
-                return;
-            }
-
-            // Butonu devre dışı bırak ve loading durumunu göster
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Güncelleniyor...';
-
-            // Form gönderimi başarısız olursa butonu tekrar aktif et
-            setTimeout(() => {
-                if (submitBtn.disabled) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>Kaydet';
-                }
-            }, 10000); // 10 saniye timeout
-        });
-    }
-});
-</script>
-@endpush
-
-<style>
-.form-select {
-    background-color: #fff;
-    border: 1px solid #d1d3e2;
-    border-radius: 0.35rem;
-    padding: 0.375rem 0.75rem;
-}
-
-.form-select:focus {
-    border-color: #bac8f3;
-    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
-}
-
-#image-preview img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 0.35rem;
-}
-
-.btn-secondary {
-    color: #fff;
-    background-color: #858796;
-    border-color: #858796;
-}
-
-.btn-secondary:hover {
-    color: #fff;
-    background-color: #717384;
-    border-color: #6b6d7d;
-}
-
-.img-thumbnail {
-    max-width: 200px;
-    height: auto;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    padding: 0.25rem;
-}
-</style>
 @endsection

@@ -1,9 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Enums\NewsStatus;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -38,125 +46,188 @@ class News extends Model
     ];
 
     protected $casts = [
-        'is_active'            => 'boolean',
-        'is_breaking'          => 'boolean',
-        'is_featured'          => 'boolean',
-        'is_editor_pick'       => 'boolean',
-        'views'                => 'integer',
-        'reading_time'         => 'integer',
-        'image_id'             => 'integer',
-        'category_id'          => 'integer',
-        'user_id'              => 'integer',
-        'news_source_id'       => 'integer',
-        'source_published_at'  => 'datetime',
-        'created_at'           => 'datetime',
-        'updated_at'           => 'datetime',
-        'deleted_at'           => 'datetime',
+        'is_active'           => 'boolean',
+        'is_breaking'         => 'boolean',
+        'is_featured'         => 'boolean',
+        'is_editor_pick'      => 'boolean',
+        'status'              => NewsStatus::class,
+        'views'               => 'integer',
+        'reading_time'        => 'integer',
+        'image_id'            => 'integer',
+        'category_id'         => 'integer',
+        'user_id'             => 'integer',
+        'news_source_id'      => 'integer',
+        'source_published_at' => 'datetime',
+        'created_at'          => 'datetime',
+        'updated_at'          => 'datetime',
+        'deleted_at'          => 'datetime',
     ];
 
     // ─── İLİŞKİLER ────────────────────────────────────
 
-    // HABER > KATEGORİ ilişkisi
-    public function category()
+    /**
+     * @return BelongsTo<Category, $this>
+     */
+    public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'category_id');
     }
 
-    // HABER > ÇOKLU KATEGORİ ilişkisi
-    public function categories()
+    /**
+     * @return BelongsToMany<Category, $this>
+     */
+    public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class, 'category_news')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
-    // HABER > YAZAN KULLANICI ilişkisi
-    public function user()
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    // HABER > GÖRSEL ilişkisi
-    public function image()
+    /**
+     * @return BelongsTo<Image, $this>
+     */
+    public function image(): BelongsTo
     {
         return $this->belongsTo(Image::class, 'image_id');
     }
 
-    // HABER > YORUMLAR ilişkisi
-    public function comments()
+    /**
+     * @return HasMany<Comment, $this>
+     */
+    public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
     }
 
-    // HABER > ETİKETLER ilişkisi
-    public function tags()
+    /**
+     * @return BelongsToMany<Tag, $this>
+     */
+    public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class, 'news_tag')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
-    // HABER > KAYNAK ilişkisi
-    public function newsSource()
+    /**
+     * @return BelongsTo<NewsSource, $this>
+     */
+    public function newsSource(): BelongsTo
     {
         return $this->belongsTo(NewsSource::class, 'news_source_id');
     }
 
     // ─── SCOPE'LAR ─────────────────────────────────────
 
-    // Scope: yalnızca aktif haberleri getir
-    public function scopeActive($query)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
     }
 
-    // Scope: yayınlanmış haberler
-    public function scopePublished($query)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopePublished(Builder $query): Builder
     {
-        return $query->where('status', 'published')->where('is_active', true);
+        return $query->where('status', NewsStatus::Published)->where('is_active', true);
     }
 
-    // Scope: son dakika haberleri
-    public function scopeBreaking($query)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeBreaking(Builder $query): Builder
     {
-        return $query->where('is_breaking', true)->published();
+        return $this->scopePublished($query->where('is_breaking', true));
     }
 
-    // Scope: manşet haberleri
-    public function scopeFeatured($query)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeFeatured(Builder $query): Builder
     {
-        return $query->where('is_featured', true)->published();
+        return $this->scopePublished($query->where('is_featured', true));
     }
 
-    // Scope: editör seçimleri
-    public function scopeEditorPicks($query)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeEditorPicks(Builder $query): Builder
     {
-        return $query->where('is_editor_pick', true)->published();
+        return $this->scopePublished($query->where('is_editor_pick', true));
     }
 
-    // Scope: en çok okunanlar
-    public function scopeMostRead($query, int $limit = 10)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeMostRead(Builder $query, int $limit = 10): Builder
     {
-        return $query->published()->orderByDesc('views')->limit($limit);
+        return $this->scopePublished($query)->orderByDesc('views')->limit($limit);
     }
 
-    // Scope: en çok yorumlananlar
-    public function scopeMostCommented($query, int $limit = 10)
+    /**
+     * @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function scopeMostCommented(Builder $query, int $limit = 10): Builder
     {
-        return $query->published()
-                     ->withCount('comments')
-                     ->orderByDesc('comments_count')
-                     ->limit($limit);
+        return $this->scopePublished($query)
+            ->withCount('comments')
+            ->orderByDesc('comments_count')
+            ->limit($limit);
     }
 
     // ─── YARDIMCI METODLAR ─────────────────────────────
 
     /**
-     * İçerikten tahmini okuma süresini hesapla (dakika)
+     * Benzersiz haber slug'ı üret
+     */
+    public static function generateUniqueSlug(string $title, ?int $ignoreId = null): string
+    {
+        $slug = Str::slug($title);
+        if ($slug === '') {
+            $slug = 'haber-' . uniqid();
+        }
+
+        $originalSlug = Str::limit($slug, 175, '');
+        $slug = $originalSlug;
+        $counter = 2;
+
+        while (
+            static::withTrashed()
+                ->where('slug', $slug)
+                ->when($ignoreId !== null, static fn (Builder $q): Builder => $q->where('id', '!=', $ignoreId))
+                ->exists()
+        ) {
+            $slug = $originalSlug . '-' . $counter++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * İçerikten tahmini okuma süresini hesapla (dakika, Türkçe Unicode uyumlu)
      */
     public static function calculateReadingTime(string $content): int
     {
-        $wordCount = str_word_count(strip_tags($content));
-        $readingTime = max(1, (int) ceil($wordCount / 200)); // Ortalama 200 kelime/dakika
-        return $readingTime;
+        $plain = strip_tags($content);
+        $wordCount = preg_match_all('/[\p{L}\p{N}]+/u', $plain);
+
+        return max(1, (int) ceil(((int) $wordCount) / 200));
     }
 
     /**
@@ -164,22 +235,36 @@ class News extends Model
      */
     public static function generateContentHash(string $title, string $content): string
     {
-        $normalized = mb_strtolower(trim($title) . '|' . trim(Str::limit(strip_tags($content), 500, '')));
+        $normalized = mb_strtolower(
+            trim($title) . '|' . trim(Str::limit(strip_tags($content), 500, '')),
+            'UTF-8'
+        );
+
         return hash('sha256', $normalized);
     }
 
     /**
-     * Benzer haberleri bul
+     * Benzer haberleri bul (N+1 önlemek için category & image eager-loaded)
+     *
+     * @return Collection<int, self>
      */
-    public function relatedNews(int $limit = 5)
+    public function relatedNews(int $limit = 5): Collection
     {
-        return static::published()
+        $tagIds = $this->relationLoaded('tags')
+            ? $this->tags->pluck('id')->all()
+            : $this->tags()->pluck('tags.id')->all();
+
+        return self::query()
+            ->with(['category', 'image'])
+            ->published()
             ->where('id', '!=', $this->id)
-            ->where(function ($query) {
-                $query->where('category_id', $this->category_id)
-                      ->orWhereHas('tags', function ($q) {
-                          $q->whereIn('tags.id', $this->tags->pluck('id'));
-                      });
+            ->where(function (Builder $query) use ($tagIds): void {
+                $query->where('category_id', $this->category_id);
+                if ($tagIds !== []) {
+                    $query->orWhereHas('tags', static function (Builder $q) use ($tagIds): void {
+                        $q->whereIn('tags.id', $tagIds);
+                    });
+                }
             })
             ->latest()
             ->limit($limit)
@@ -192,14 +277,18 @@ class News extends Model
     public function getPublishedDateAttribute(): string
     {
         $date = $this->source_published_at ?? $this->created_at;
-        $diff = $date->diffInMinutes(now());
+        if ($date === null) {
+            return '';
+        }
+
+        $diff = (int) $date->diffInMinutes(now());
 
         return match (true) {
-            $diff < 1       => 'Az önce',
-            $diff < 60      => $diff . ' dakika önce',
-            $diff < 1440    => $date->diffInHours(now()) . ' saat önce',
-            $diff < 10080   => $date->diffInDays(now()) . ' gün önce',
-            default         => $date->format('d.m.Y H:i'),
+            $diff < 1     => 'Az önce',
+            $diff < 60    => $diff . ' dakika önce',
+            $diff < 1440  => (int) $date->diffInHours(now()) . ' saat önce',
+            $diff < 10080 => (int) $date->diffInDays(now()) . ' gün önce',
+            default       => $date->format('d.m.Y H:i'),
         };
     }
 
@@ -212,16 +301,14 @@ class News extends Model
             return asset('storage/' . $this->image->path);
         }
 
-        // Yedek görsel: Yerel SVG placeholder
         return asset('images/placeholder.svg');
     }
 
     // ─── BOOT ──────────────────────────────────────────
 
-    protected static function booted()
+    protected static function booted(): void
     {
-        // Kaydetmeden önce okuma süresi ve hash hesapla
-        static::saving(function ($news) {
+        static::saving(static function (self $news): void {
             if ($news->isDirty('content') || !$news->reading_time) {
                 $news->reading_time = static::calculateReadingTime($news->content ?? '');
             }

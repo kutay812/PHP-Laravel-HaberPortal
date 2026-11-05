@@ -1,35 +1,35 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
+use App\Enums\RoleName;
 use Illuminate\Console\Command;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class UpdatePermissions extends Command
 {
     protected $signature = 'permissions:update';
     protected $description = 'Update permissions for all roles without affecting existing users';
 
-    public function handle()
+    public function handle(): int
     {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         $this->info('Updating permissions...');
 
-        // Yeni permission'ları oluştur
         $permissions = [
-            // Kullanıcı yönetimi
             'users.view',
             'users.create',
             'users.edit',
             'users.delete',
-
-            // Haber yönetimi
             'news.view',
             'news.create',
             'news.edit',
             'news.delete',
-
-            // Kategori yönetimi
             'categories.view',
             'categories.create',
             'categories.edit',
@@ -40,40 +40,27 @@ class UpdatePermissions extends Command
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // Rolleri güncelle
-        $superAdmin = Role::firstOrCreate(['name' => 'Super Admin']);
-        $admin = Role::firstOrCreate(['name' => 'Admin']);
-        $editor = Role::firstOrCreate(['name' => 'Editor']);
+        $superAdmin = Role::firstOrCreate(['name' => RoleName::SuperAdmin->value]);
+        $admin = Role::firstOrCreate(['name' => RoleName::Admin->value]);
+        $editor = Role::firstOrCreate(['name' => RoleName::Editor->value]);
+        Role::firstOrCreate(['name' => RoleName::User->value]);
 
-        // Super Admin tüm yetkilere sahip
         $superAdmin->syncPermissions(Permission::all());
 
-        // Admin tüm yetkilere sahip (Super Admin yönetimi hariç)
-        $admin->syncPermissions([
-            'users.view',
-            'users.create',
-            'users.edit',
-            'users.delete',
-            'news.view',
-            'news.create',
-            'news.edit',
-            'news.delete',
-            'categories.view',
-            'categories.create',
-            'categories.edit',
-            'categories.delete',
-        ]);
+        $admin->syncPermissions($permissions);
 
-        // Editor sadece haber yönetimi yetkilerine sahip
         $editor->syncPermissions([
             'news.view',
             'news.create',
             'news.edit',
             'news.delete',
-            'categories.view', // Kategorileri sadece görüntüleyebilir
+            'categories.view',
         ]);
 
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         $this->info('Permissions updated successfully!');
-        $this->info('Admin role now has: users.*, news.*, categories.* permissions');
+
+        return self::SUCCESS;
     }
 }

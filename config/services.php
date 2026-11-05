@@ -31,4 +31,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'market_data' => [
+        'url' => env('MARKET_DATA_API_URL', 'https://finans.truncgil.com/today.json'),
+        'timeout' => (int) env('MARKET_DATA_TIMEOUT', 3),
+    ],
+
 ];

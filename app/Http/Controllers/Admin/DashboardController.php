@@ -1,22 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RoleName;
 use App\Http\Controllers\Controller;
-use App\Models\News;
+use App\Jobs\FetchNewsJob;
 use App\Models\Category;
-use App\Models\User;
+use App\Models\Comment;
+use App\Models\News;
 use App\Models\NewsSource;
 use App\Models\Tag;
-use App\Models\Comment;
+use App\Models\User;
+use App\Services\QueueTriggerService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-    /**
-     * Admin Dashboard statistics
-     */
-    public function index()
+    public function index(): View
     {
         $stats = [
             'news_count'     => News::count(),
@@ -25,7 +30,7 @@ class DashboardController extends Controller
             'source_count'   => NewsSource::count(),
             'tag_count'      => Tag::count(),
             'comment_count'  => Comment::count(),
-            'total_views'    => News::sum('views'),
+            'total_views'    => (int) News::sum('views'),
         ];
 
         $latestNews = News::with(['category', 'newsSource'])->latest()->limit(5)->get();
@@ -34,11 +39,10 @@ class DashboardController extends Controller
         return view('admin.dashboard', compact('stats', 'latestNews', 'sources'));
     }
 
-    /**
-     * Clear application cache
-     */
-    public function clearCache()
+    public function clearCache(): RedirectResponse
     {
+        abort_unless(auth()->user()?->hasAnyRole(RoleName::adminRoles()) ?? false, 403);
+
         Artisan::call('cache:clear');
         Artisan::call('view:clear');
         Artisan::call('config:clear');
@@ -48,20 +52,26 @@ class DashboardController extends Controller
     }
 
     /**
-     * Tüm kaynaklardan haber çekmeyi manuel tetikle
+     * Tüm kaynaklardan haber çekmeyi kuyruk üzerinden asenkron tetikle.
      */
-    public function fetchNews()
+    public function fetchNews(QueueTriggerService $queueTrigger): RedirectResponse
     {
         try {
-            Artisan::call('news:fetch', ['--force' => true]);
-            $output = Artisan::output();
-            
-            \Illuminate\Support\Facades\Log::info("Admin tarafından manuel tüm haber çekme tetiklendi:\n" . $output);
+            FetchNewsJob::dispatch(null, true);
+            $queueTrigger->triggerWorkerIfNeeded();
 
-            return redirect()->back()->with('success', 'Bot tüm kaynaklardan başarıyla haberleri çekti. (Çıktı loglara yazıldı.)');
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Manuel haber çekme hatası: " . $e->getMessage());
-            return redirect()->back()->with('error', 'Haber botu çalıştırılırken bir hata oluştu: ' . $e->getMessage());
+            Log::info('Admin tarafından manuel tüm haber çekme kuyruğa eklendi.', [
+                'user_id' => auth()->id(),
+            ]);
+
+            return redirect()->back()->with(
+                'success',
+                'Haber çekme ve özgünleştirme görevi arka planda başlatıldı. Yeni haberler kısa süre içinde listeye yansıyacaktır.'
+            );
+        } catch (\Throwable $e) {
+            Log::error('Manuel haber çekme kuyruk hatası: ' . $e->getMessage());
+
+            return redirect()->back()->with('error', 'Haber botu kuyruğa eklenirken bir hata oluştu.');
         }
     }
 }

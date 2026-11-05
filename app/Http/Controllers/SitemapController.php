@@ -1,54 +1,66 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use App\Models\News;
 use App\Models\Category;
+use App\Models\News;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 
 class SitemapController extends Controller
 {
     /**
-     * Standard XML Sitemap
+     * Standard XML Sitemap (cached 10 minutes to prevent scraper DB overload)
      */
     public function index(): Response
     {
-        $news = News::published()->latest()->limit(500)->get();
-        $categories = Category::all();
+        $content = Cache::remember('seo.sitemap.index', 600, static function (): string {
+            $news = News::published()->latest()->limit(500)->get();
+            $categories = Category::all();
 
-        $content = view('seo.sitemap', compact('news', 'categories'))->render();
+            return view('seo.sitemap', compact('news', 'categories'))->render();
+        });
 
         return response($content, 200)
-            ->header('Content-Type', 'text/xml');
+            ->header('Content-Type', 'text/xml; charset=UTF-8');
     }
 
     /**
-     * Google News XML Sitemap
+     * Google News XML Sitemap (cached 10 minutes)
      */
     public function news(): Response
     {
-        // Google News sitemap only lists articles published in the last 2 days (48 hours)
-        $news = News::published()
-            ->with('newsSource')
-            ->where('created_at', '>=', now()->subHours(48))
-            ->latest()
-            ->limit(1000)
-            ->get();
+        $content = Cache::remember('seo.sitemap.news', 600, static function (): string {
+            $news = News::published()
+                ->with('newsSource')
+                ->where('created_at', '>=', now()->subHours(48))
+                ->latest()
+                ->limit(1000)
+                ->get();
 
-        $content = view('seo.sitemap-news', compact('news'))->render();
+            return view('seo.sitemap-news', compact('news'))->render();
+        });
 
         return response($content, 200)
-            ->header('Content-Type', 'text/xml');
+            ->header('Content-Type', 'text/xml; charset=UTF-8');
     }
 
     /**
-     * RSS Feed for aggregators
+     * RSS Feed for aggregators (eager-loaded + cached 5 minutes)
      */
     public function feed(): Response
     {
-        $news = News::with(['category', 'user'])->published()->latest()->limit(50)->get();
+        $content = Cache::remember('seo.rss.feed', 300, static function (): string {
+            $news = News::with(['category', 'user', 'image', 'newsSource'])
+                ->published()
+                ->latest()
+                ->limit(50)
+                ->get();
 
-        $content = view('seo.rss', compact('news'))->render();
+            return view('seo.rss', compact('news'))->render();
+        });
 
         return response($content, 200)
             ->header('Content-Type', 'text/xml; charset=UTF-8');

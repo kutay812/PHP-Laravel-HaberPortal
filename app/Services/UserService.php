@@ -1,72 +1,91 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class UserService
 {
-    public function getAllUsers()
+    /**
+     * @return Collection<int, User>
+     */
+    public function getAllUsers(): Collection
     {
         return User::all();
     }
 
-    public function getUserById($id)
+    public function getUserById(int|string $id): User
     {
         return User::findOrFail($id);
     }
 
-    public function createUser(array $data)
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function createUser(array $data): User
     {
-        $data['password'] = Hash::make($data['password']);
         return User::create($data);
     }
 
-    public function updateUser($id, array $data)
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function updateUser(int|string $id, array $data): User
     {
         $user = User::findOrFail($id);
-        if (isset($data['password']) && $data['password']) {
-            $data['password'] = Hash::make($data['password']);
-        } else {
+        if (empty($data['password'])) {
             unset($data['password']);
         }
         $user->update($data);
+
         return $user;
     }
 
-    public function deleteUser($id)
+    public function deleteUser(int|string $id): ?bool
     {
-        if ($id == Auth::id()) {
-            throw new \Exception('Kendi hesabınızı silemezsiniz.');
+        if ((int) $id === (int) Auth::id()) {
+            throw ValidationException::withMessages([
+                'user' => 'Kendi hesabınızı silemezsiniz.',
+            ]);
         }
+
         return User::findOrFail($id)->delete();
     }
 
-    public function profileEdit($user, $data)
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function profileEdit(User $user, array $data): User
     {
-        // Only verify current password if user is trying to change password
         if (!empty($data['password']) || !empty($data['current_password'])) {
-            if (empty($data['current_password']) || !Hash::check($data['current_password'], $user->password)) {
-                throw new \Exception('Mevcut şifreniz yanlış veya girilmedi.');
+            if (empty($data['current_password']) || !Hash::check((string) $data['current_password'], $user->password)) {
+                throw ValidationException::withMessages([
+                    'current_password' => 'Mevcut şifreniz yanlış veya girilmedi.',
+                ]);
             }
-            $user->password = Hash::make($data['password']);
+            $user->password = (string) $data['password'];
         }
 
-        $user->name = $data['name'] ?? $user->name;
-        $user->email = $data['email'] ?? $user->email;
+        $user->name = isset($data['name']) ? (string) $data['name'] : $user->name;
+        $user->email = isset($data['email']) ? (string) $data['email'] : $user->email;
 
-        if (isset($data['profile_image']) && $data['profile_image']) {
-            // Profil resmi güncelle
+        if (isset($data['profile_image']) && $data['profile_image'] instanceof UploadedFile) {
             if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
                 Storage::disk('public')->delete($user->profile_image);
             }
-            $user->profile_image = $data['profile_image']->store('profile-image', 'public');
+            $user->profile_image = (string) $data['profile_image']->store('profile-image', 'public');
         }
 
         $user->save();
+
         return $user;
     }
 }

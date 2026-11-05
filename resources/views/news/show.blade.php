@@ -5,20 +5,18 @@
 
 @section('structured_data')
 <script type="application/ld+json">
-{
-  "@@context": "https://schema.org",
-  "@@type": "NewsArticle",
-  "headline": "{{ str_replace('"', '\"', $news->title) }}",
-  "image": [
-    "{{ $news->image_url }}"
-   ],
-  "datePublished": "{{ $news->created_at->toIso8601String() }}",
-  "dateModified": "{{ $news->updated_at->toIso8601String() }}",
-  "author": [{
-      "@@type": "Person",
-      "name": "Haber Portal"
-  }]
-}
+{!! json_encode([
+    '@context' => 'https://schema.org',
+    '@type' => 'NewsArticle',
+    'headline' => $news->title,
+    'image' => [$news->image_url],
+    'datePublished' => $news->created_at?->toIso8601String(),
+    'dateModified' => $news->updated_at?->toIso8601String(),
+    'author' => [[
+        '@type' => 'Person',
+        'name' => 'Haber Portal',
+    ]],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
 @endsection
 
@@ -112,7 +110,7 @@
                 @endif
                 <div class="flex items-center gap-1 ml-auto">
                     <span class="material-symbols-outlined text-[16px]">visibility</span>
-                    <span>{{ $news->views_count ?? 0 }} Okunma</span>
+                    <span>{{ $news->views ?? 0 }} Okunma</span>
                 </div>
             </div>
 
@@ -136,7 +134,7 @@
 
             <!-- Body Text -->
             <div class="font-body-md md:font-body-lg text-body-md md:text-body-lg text-on-surface space-y-6 prose prose-lg max-w-none prose-headings:font-headline-md prose-headings:text-primary prose-a:text-secondary hover:prose-a:text-primary transition-colors">
-                {!! $news->content !!}
+                {!! app(\App\Services\HtmlSanitizerService::class)->sanitize($news->content) !!}
             </div>
 
             <!-- Tags -->
@@ -144,7 +142,7 @@
             <div class="mt-12 flex flex-wrap gap-2">
                 <span class="font-label-caps text-label-caps text-outline mb-2 w-full">ETİKETLER:</span>
                 @foreach($news->tags as $tag)
-                <a href="{{ route('home', ['tag' => $tag->name]) }}" class="bg-surface-container hover:bg-surface-variant px-3 py-1.5 rounded-sm font-meta-data text-meta-data text-on-surface transition-colors border border-outline-variant">
+                <a href="{{ route('home', ['tag' => $tag->slug]) }}" class="bg-surface-container hover:bg-surface-variant px-3 py-1.5 rounded-sm font-meta-data text-meta-data text-on-surface transition-colors border border-outline-variant">
                     #{{ $tag->name }}
                 </a>
                 @endforeach
@@ -153,7 +151,7 @@
         </article>
 
         <!-- Yorumlar Bölümü -->
-        <section class="col-span-1 lg:col-span-6 mt-12 pt-8 border-t-[3px] border-primary">
+        <section id="comments" class="col-span-1 lg:col-span-6 mt-12 pt-8 border-t-[3px] border-primary">
             <div class="flex items-center justify-between mb-6">
                 <h2 class="font-headline-md text-headline-md text-primary uppercase">Yorumlar ({{ $news->comments->count() }})</h2>
             </div>
@@ -190,12 +188,12 @@
                     <div class="flex gap-4 p-5 bg-surface border border-outline-variant hover:border-secondary transition-colors">
                         <div class="flex-shrink-0">
                             <div class="w-12 h-12 bg-primary-container text-on-primary-container rounded-full flex items-center justify-center font-headline-sm uppercase font-bold">
-                                {{ mb_substr($comment->user->name, 0, 1) }}
+                                {{ mb_substr($comment->user?->name ?? 'K', 0, 1) }}
                             </div>
                         </div>
                         <div class="flex-grow">
                             <div class="flex justify-between items-baseline mb-2">
-                                <h4 class="font-headline-sm text-headline-sm text-on-surface">{{ $comment->user->name }}</h4>
+                                <h4 class="font-headline-sm text-headline-sm text-on-surface">{{ $comment->user?->name ?? 'Kullanıcı' }}</h4>
                                 <span class="font-meta-data text-[12px] text-outline">{{ $comment->created_at->diffForHumans() }}</span>
                             </div>
                             <p class="font-body-md text-body-md text-on-surface-variant whitespace-pre-wrap">{{ $comment->content }}</p>

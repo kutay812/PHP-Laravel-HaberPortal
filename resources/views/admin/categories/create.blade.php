@@ -1,12 +1,14 @@
 @extends('layouts.admin.app')
 
+@section('title', 'Yeni Kategori')
+
 @section('content')
 <div class="container-fluid">
     <!-- Page Heading -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h3 mb-0 text-gray-800">Yeni Kategori</h1>
         <a href="{{ route('admin.categories.index') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> Geri Dön
+            <i class="fas fa-arrow-left mr-1"></i> Geri Dön
         </a>
     </div>
 
@@ -22,7 +24,7 @@
                             <li>{{ $error }}</li>
                         @endforeach
                     </ul>
-                    <button type="button" class="close" data-dismiss="alert">
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Kapat">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
@@ -32,44 +34,46 @@
                 @csrf
 
                 <div class="row">
-                    <div class="col-md-8">
-                        <div class="form-group">
-                            <label for="name">Kategori Adı</label>
-                            <input type="text" class="form-control" id="name" name="name" value="{{ old('name') }}" required>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="name" class="form-label">Kategori Adı *</label>
+                            <input type="text" class="form-control @error('name') is-invalid @enderror" id="name" name="name" value="{{ old('name') }}" required>
+                            @error('name')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="status">Durum</label>
-                            <select class="form-control" id="status" name="status" required>
-                                <option value="1" {{ old('status', '1') == '1' ? 'selected' : '' }}>Aktif</option>
-                                <option value="0" {{ old('status') == '0' ? 'selected' : '' }}>Pasif</option>
-                            </select>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="title" class="form-label">Başlık (SEO)</label>
+                            <input type="text" class="form-control @error('title') is-invalid @enderror" id="title" name="title" value="{{ old('title') }}" placeholder="örn: Son Dakika Ekonomi Haberleri">
+                            @error('title')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 </div>
 
                 <div class="form-group mb-3">
-                    <label for="main_category_id">Ana Kategori</label>
-                    <select class="form-control" id="main_category_id" name="main_category_id">
+                    <label for="main_category_id" class="form-label">Ana Kategori</label>
+                    <select class="form-select" id="main_category_id" name="main_category_id">
                         <option value="">Ana Kategori Seçin (Opsiyonel)</option>
                         @foreach($mainCategories as $mainCategory)
-                            <option value="{{ $mainCategory->id }}" {{ old('main_category_id') == $mainCategory->id ? 'selected' : '' }}>
+                            <option value="{{ $mainCategory->id }}" {{ (string) old('main_category_id') === (string) $mainCategory->id ? 'selected' : '' }}>
                                 {{ $mainCategory->name }}
                             </option>
                         @endforeach
                     </select>
                 </div>
-                
-                <div class="form-group">
-                    <label for="description">Açıklama</label>
-                    <textarea class="form-control" id="description" name="description" rows="2">{{ old('description') }}</textarea>
-                </div>
-                
 
-                <div class="form-group">
+                <div class="form-group mb-4">
+                    <label for="description" class="form-label">Açıklama</label>
+                    <textarea class="form-control" id="description" name="description" rows="3">{{ old('description') }}</textarea>
+                </div>
+
+                <div class="form-group mb-0">
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Kaydet
+                        <i class="fas fa-save mr-1"></i> Kaydet
                     </button>
                 </div>
             </form>

@@ -2,25 +2,22 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "laravel/laravel",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Haber Portalı - Laravel 12 & PHP 8.5",
+    "keywords": ["laravel", "framework", "news", "portal"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
-        "laravel/framework": "^12.0",
-        "laravel/sanctum": "*",
+        "php": "^8.5",
+        "laravel/framework": "^12.69",
+        "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
-        "livewire/livewire": "^3.6",
         "spatie/laravel-permission": "^6.20",
-        "symfony/http-client": "^7.3",
-        "symfony/mailgun-mailer": "^7.3"
+        "symfony/html-sanitizer": "^7.4 || ^8.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
-        "laravel/breeze": "^2.3",
+        "larastan/larastan": "^3.0",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.13",
-        "laravel/sail": "^1.41",
         "laravel/telescope": "^5.10",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
@@ -65,12 +62,14 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "laravel/telescope"
+            ]
         }
     },
     "config": {
         "platform": {
-            "php": "8.2.12"
+            "php": "8.5.12"
         },
         "optimize-autoloader": true,
         "preferred-install": "dist",
